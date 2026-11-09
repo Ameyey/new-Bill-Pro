@@ -241,3 +241,69 @@ exports.deleteCustomerGstNumber = async (req, res) => {
   }
 };
 
+// Get previous invoice configuration, DC fields, column preferences, and previous items for a customer
+exports.getCustomerPreviousConfig = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const lastInvoice = await db.get(
+      'SELECT * FROM invoices WHERE customer_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1',
+      [id, req.user.id]
+    );
+
+    if (!lastInvoice) {
+      return res.json({
+        success: true,
+        hasPreviousInvoice: false,
+        column_preferences: null,
+        custom_dc_values: null,
+        in_dc_no: '',
+        out_dc_no: '',
+        items: []
+      });
+    }
+
+    const items = await db.query(
+      'SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no ASC, id ASC',
+      [lastInvoice.id]
+    );
+
+    const safeParse = (val, fb = null) => {
+      if (val === null || val === undefined) return fb;
+      if (typeof val === 'object') return val;
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return fb; }
+      }
+      return fb;
+    };
+
+    return res.json({
+      success: true,
+      hasPreviousInvoice: true,
+      lastInvoiceId: lastInvoice.id,
+      invoice_number: lastInvoice.invoice_number,
+      column_preferences: safeParse(lastInvoice.column_preferences),
+      custom_dc_values: safeParse(lastInvoice.custom_dc_values, {}),
+      in_dc_no: lastInvoice.in_dc_no || '',
+      out_dc_no: lastInvoice.out_dc_no || '',
+      payment_mode: lastInvoice.payment_mode || 'Bank Transfer',
+      notes: lastInvoice.notes || '',
+      terms: lastInvoice.terms || '',
+      items: items.map(it => ({
+        product_id: it.product_id || '',
+        description: it.description || '',
+        sq_ft: it.sq_ft !== null && it.sq_ft !== undefined ? String(it.sq_ft) : '',
+        quantity: String(it.quantity || 1),
+        unit: it.unit || 'Nos',
+        rate: String(it.rate || 0),
+        taxable_amount: it.taxable_amount || 0,
+        gst_rate: it.gst_rate || '',
+        discount: it.discount || '',
+        custom_fields: safeParse(it.custom_fields, {})
+      }))
+    });
+  } catch (error) {
+    console.error('getCustomerPreviousConfig error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+

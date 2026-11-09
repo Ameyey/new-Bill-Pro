@@ -122,7 +122,13 @@ export default function CreateInvoice() {
   });
 
   // Column Preferences State (Customizable Column & Field Names, Show/Hide, Add/Delete)
-  const [columnPreferences, setColumnPreferences] = useState(getStoredPreferences);
+  const [columnPreferences, setColumnPreferences] = useState(() => {
+    const stored = getStoredPreferences();
+    return {
+      ...stored,
+      dcFields: (stored.dcFields || DEFAULT_DC_FIELDS).map(f => ({ ...f, visible: true }))
+    };
+  });
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [columnModalTab, setColumnModalTab] = useState('items'); // 'items' or 'dc'
   const [customDcValues, setCustomDcValues] = useState({});
@@ -312,7 +318,15 @@ export default function CreateInvoice() {
     }
   };
 
-  const handleCustomerSelect = (customerId, custList = customers) => {
+  const handleCustomerSelect = async (customerId, custList = customers) => {
+    if (!customerId) {
+      setSelectedCustomerId('');
+      setSelectedCustomer(null);
+      setSelectedGstId('');
+      setSelectedGstNumber('');
+      return;
+    }
+
     const custId = parseInt(customerId, 10);
     setSelectedCustomerId(custId);
     const cust = custList.find(c => c.id === custId);
@@ -331,6 +345,63 @@ export default function CreateInvoice() {
     } else {
       setSelectedGstId('');
       setSelectedGstNumber('');
+    }
+
+    // Automatically configure Invoice & Delivery Challan (DC) Information & Item Columns for this company
+    if (!isEditMode && custId) {
+      try {
+        const res = await api.get(`/customers/${custId}/previous-config`);
+        if (res.success && res.hasPreviousInvoice) {
+          // Company has a previous invoice: Auto-select its exact DC fields and invoice columns!
+          const effective = getInvoiceEffectivePreferences({
+            ...res,
+            in_dc_no: res.in_dc_no,
+            out_dc_no: res.out_dc_no,
+            items: res.items,
+            custom_dc_values: res.custom_dc_values,
+            column_preferences: res.column_preferences
+          });
+          setColumnPreferences(effective);
+
+          // Populate previous DC details & notes/terms if not already typed
+          if (res.custom_dc_values && Object.keys(res.custom_dc_values).length > 0) {
+            setCustomDcValues(res.custom_dc_values);
+          }
+          if (res.in_dc_no && !inDcNo) setInDcNo(res.in_dc_no);
+          if (res.out_dc_no && !outDcNo) setOutDcNo(res.out_dc_no);
+          if (res.payment_mode) setPaymentMode(res.payment_mode);
+          if (res.notes && !notes) setNotes(res.notes);
+          if (res.terms && !terms) setTerms(res.terms);
+
+          // Auto-populate prior bill items if current table is empty/untouched
+          const isSingleEmptyRow = items.length === 1 && !items[0].description && (!items[0].rate || items[0].rate === '0');
+          if (isSingleEmptyRow && res.items && res.items.length > 0) {
+            setItems(res.items);
+          }
+        } else {
+          // Company has no prior invoice: Automatically ensure ALL standard Delivery Challan (DC) fields and Invoice Columns are selected & visible!
+          setColumnPreferences(prev => {
+            const current = prev || getStoredPreferences();
+            return {
+              ...current,
+              dcFields: (current.dcFields || DEFAULT_DC_FIELDS).map(f => ({ ...f, visible: true })),
+              itemColumns: (current.itemColumns || DEFAULT_ITEM_COLUMNS).map(c => ({
+                ...c,
+                visible: c.id === 'discount' || c.id === 'gst_rate' ? Boolean(c.visible) : true
+              }))
+            };
+          });
+        }
+      } catch (err) {
+        // Fallback: ensure standard DC fields are visible
+        setColumnPreferences(prev => {
+          const current = prev || getStoredPreferences();
+          return {
+            ...current,
+            dcFields: (current.dcFields || DEFAULT_DC_FIELDS).map(f => ({ ...f, visible: true }))
+          };
+        });
+      }
     }
   };
 

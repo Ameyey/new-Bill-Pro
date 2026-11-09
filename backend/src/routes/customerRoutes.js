@@ -15,5 +15,8 @@ router.delete('/:id', customerController.deleteCustomer);
 router.post('/:id/gst-numbers', customerController.addCustomerGstNumber);
 router.delete('/:id/gst-numbers/:gstId', customerController.deleteCustomerGstNumber);
 
+// Previous Invoice Config & DC Fields for Customer
+router.get('/:id/previous-config', customerController.getCustomerPreviousConfig);
+
 module.exports = router;
 
