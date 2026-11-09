@@ -18,7 +18,14 @@ function sanitizeParams(params) {
 
 function convertSqlForPg(sql) {
   let paramIndex = 1;
-  return sql.replace(/\?/g, () => `$${paramIndex++}`);
+  let converted = sql.replace(/\?/g, () => `$${paramIndex++}`);
+
+  // Automatically convert common MySQL functions to Postgres equivalents
+  converted = converted.replace(/DATE_FORMAT\s*\(\s*([^,]+)\s*,\s*['"]%Y-%m-%d['"]\s*\)/gi, "TO_CHAR($1, 'YYYY-MM-DD')");
+  converted = converted.replace(/DATE_FORMAT\s*\(\s*([^,]+)\s*,\s*['"]%Y-%m['"]\s*\)/gi, "TO_CHAR($1, 'YYYY-MM')");
+  converted = converted.replace(/\bIFNULL\s*\(/gi, 'COALESCE(');
+
+  return converted;
 }
 
 function init() {

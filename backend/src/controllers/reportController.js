@@ -103,17 +103,21 @@ exports.getDetailedReports = async (req, res) => {
       params.push(end_date);
     }
 
+    const isPg = typeof db.isPostgres === 'function' ? db.isPostgres() : !!db.isPostgres;
+    const dateExpr = isPg ? "TO_CHAR(invoice_date, 'YYYY-MM-DD')" : "DATE_FORMAT(invoice_date, '%Y-%m-%d')";
+    const castNum = isPg ? '::numeric' : '';
+
     // 1. Daily / Date-wise sales
     const dailySales = await db.query(
       `SELECT 
-        DATE_FORMAT(invoice_date, '%Y-%m-%d') as date,
+        ${dateExpr} as date,
         COUNT(*) as invoice_count,
-        ROUND(COALESCE(SUM(taxable_amount), 0), 2) as taxable,
-        ROUND(COALESCE(SUM(total_gst), 0), 2) as gst,
-        ROUND(COALESCE(SUM(grand_total), 0), 2) as total
+        ROUND(COALESCE(SUM(taxable_amount), 0)${castNum}, 2) as taxable,
+        ROUND(COALESCE(SUM(total_gst), 0)${castNum}, 2) as gst,
+        ROUND(COALESCE(SUM(grand_total), 0)${castNum}, 2) as total
        FROM invoices
        WHERE user_id = ? ${dateFilter}
-       GROUP BY DATE_FORMAT(invoice_date, '%Y-%m-%d')
+       GROUP BY ${dateExpr}
        ORDER BY date DESC`,
       params
     );
@@ -123,8 +127,8 @@ exports.getDetailedReports = async (req, res) => {
       `SELECT 
         customer_name,
         COUNT(*) as total_invoices,
-        ROUND(COALESCE(SUM(grand_total), 0), 2) as total_spent,
-        ROUND(COALESCE(SUM(total_gst), 0), 2) as total_gst
+        ROUND(COALESCE(SUM(grand_total), 0)${castNum}, 2) as total_spent,
+        ROUND(COALESCE(SUM(total_gst), 0)${castNum}, 2) as total_gst
        FROM invoices
        WHERE user_id = ? ${dateFilter}
        GROUP BY customer_name
@@ -147,9 +151,9 @@ exports.getDetailedReports = async (req, res) => {
     const productSales = await db.query(
       `SELECT 
         ii.description as product_name,
-        ROUND(COALESCE(SUM(ii.quantity), 0), 2) as total_quantity,
-        ROUND(COALESCE(SUM(ii.sq_ft), 0), 2) as total_sq_ft,
-        ROUND(COALESCE(SUM(ii.total_amount), 0), 2) as total_revenue
+        ROUND(COALESCE(SUM(ii.quantity), 0)${castNum}, 2) as total_quantity,
+        ROUND(COALESCE(SUM(ii.sq_ft), 0)${castNum}, 2) as total_sq_ft,
+        ROUND(COALESCE(SUM(ii.total_amount), 0)${castNum}, 2) as total_revenue
        FROM invoice_items ii
        JOIN invoices inv ON ii.invoice_id = inv.id
        WHERE inv.user_id = ? ${itemDateFilter}
