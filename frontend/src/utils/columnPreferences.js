@@ -48,6 +48,25 @@ export const DEFAULT_HEADER_PREFERENCES = {
 };
 
 export const STORAGE_KEY = 'billpro_column_preferences';
+export const CUSTOMER_PREFS_PREFIX = 'billpro_company_prefs_';
+
+export function getCompanyColumnPreferences(companyId) {
+  if (!companyId) return null;
+  try {
+    const raw = localStorage.getItem(`${CUSTOMER_PREFS_PREFIX}${companyId}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function saveCompanyColumnPreferences(companyId, preferences) {
+  if (!companyId || !preferences) return;
+  try {
+    localStorage.setItem(`${CUSTOMER_PREFS_PREFIX}${companyId}`, JSON.stringify(preferences));
+  } catch (e) {}
+}
 
 export function getStoredPreferences() {
   try {

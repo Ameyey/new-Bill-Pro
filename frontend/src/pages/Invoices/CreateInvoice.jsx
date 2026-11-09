@@ -12,6 +12,8 @@ import {
   getStoredPreferences,
   saveStoredPreferences,
   getInvoiceEffectivePreferences,
+  getCompanyColumnPreferences,
+  saveCompanyColumnPreferences,
   DEFAULT_ITEM_COLUMNS,
   DEFAULT_DC_FIELDS
 } from '../../utils/columnPreferences';
@@ -151,6 +153,10 @@ export default function CreateInvoice() {
   const handleSaveColumnPreferences = (updated) => {
     setColumnPreferences(updated);
     saveStoredPreferences(updated);
+    if (selectedCustomerId) {
+      saveCompanyColumnPreferences(selectedCustomerId, updated);
+      api.put(`/customers/${selectedCustomerId}/column-preferences`, { column_preferences: updated }).catch(() => {});
+    }
     success('Column preferences saved successfully!');
   };
 
@@ -347,21 +353,43 @@ export default function CreateInvoice() {
       setSelectedGstNumber('');
     }
 
-    // Automatically configure Invoice & Delivery Challan (DC) Information & Item Columns for this company
+    // Instantly apply company-specific column preferences and DC fields
     if (!isEditMode && custId) {
+      // 1. Instant local switch: check company-specific memory or customer profile
+      const localCompanyPrefs = getCompanyColumnPreferences(custId) || cust?.column_preferences;
+      if (localCompanyPrefs) {
+        setColumnPreferences(getInvoiceEffectivePreferences({ column_preferences: localCompanyPrefs }));
+      } else {
+        // Default: ensure all standard DC fields and item columns are selected and visible
+        setColumnPreferences(prev => {
+          const base = prev || getStoredPreferences();
+          return {
+            ...base,
+            dcFields: DEFAULT_DC_FIELDS.map(f => ({ ...f, visible: true })),
+            itemColumns: (base.itemColumns || DEFAULT_ITEM_COLUMNS).map(c => ({
+              ...c,
+              visible: c.id === 'discount' || c.id === 'gst_rate' ? Boolean(c.visible) : true
+            }))
+          };
+        });
+      }
+
+      // 2. Fetch server-side company previous invoice & config
       try {
         const res = await api.get(`/customers/${custId}/previous-config`);
-        if (res.success && res.hasPreviousInvoice) {
-          // Company has a previous invoice: Auto-select its exact DC fields and invoice columns!
-          const effective = getInvoiceEffectivePreferences({
-            ...res,
-            in_dc_no: res.in_dc_no,
-            out_dc_no: res.out_dc_no,
-            items: res.items,
-            custom_dc_values: res.custom_dc_values,
-            column_preferences: res.column_preferences
-          });
-          setColumnPreferences(effective);
+        if (res.success) {
+          if (res.column_preferences) {
+            const effective = getInvoiceEffectivePreferences({
+              ...res,
+              in_dc_no: res.in_dc_no,
+              out_dc_no: res.out_dc_no,
+              items: res.items,
+              custom_dc_values: res.custom_dc_values,
+              column_preferences: res.column_preferences
+            });
+            setColumnPreferences(effective);
+            saveCompanyColumnPreferences(custId, effective);
+          }
 
           // Populate previous DC details & notes/terms if not already typed
           if (res.custom_dc_values && Object.keys(res.custom_dc_values).length > 0) {
@@ -378,29 +406,9 @@ export default function CreateInvoice() {
           if (isSingleEmptyRow && res.items && res.items.length > 0) {
             setItems(res.items);
           }
-        } else {
-          // Company has no prior invoice: Automatically ensure ALL standard Delivery Challan (DC) fields and Invoice Columns are selected & visible!
-          setColumnPreferences(prev => {
-            const current = prev || getStoredPreferences();
-            return {
-              ...current,
-              dcFields: (current.dcFields || DEFAULT_DC_FIELDS).map(f => ({ ...f, visible: true })),
-              itemColumns: (current.itemColumns || DEFAULT_ITEM_COLUMNS).map(c => ({
-                ...c,
-                visible: c.id === 'discount' || c.id === 'gst_rate' ? Boolean(c.visible) : true
-              }))
-            };
-          });
         }
       } catch (err) {
-        // Fallback: ensure standard DC fields are visible
-        setColumnPreferences(prev => {
-          const current = prev || getStoredPreferences();
-          return {
-            ...current,
-            dcFields: (current.dcFields || DEFAULT_DC_FIELDS).map(f => ({ ...f, visible: true }))
-          };
-        });
+        console.warn('Customer config fetch fallback:', err);
       }
     }
   };

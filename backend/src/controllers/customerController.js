@@ -1,5 +1,14 @@
 const db = require('../config/db');
 
+function safeParse(val, fallback = null) {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch (e) { return fallback; }
+  }
+  return fallback;
+}
+
 // Get all customers with their GST numbers
 exports.getCustomers = async (req, res) => {
   try {
@@ -26,6 +35,7 @@ exports.getCustomers = async (req, res) => {
         const defaultGst = gstList.find((g) => g.is_default === 1) || gstList[0] || null;
         return {
           ...cust,
+          column_preferences: safeParse(cust.column_preferences),
           gst_numbers: gstList,
           default_gst_number: defaultGst ? defaultGst.gst_number : ''
         };
@@ -53,7 +63,14 @@ exports.getCustomerById = async (req, res) => {
       [id]
     );
 
-    return res.json({ success: true, customer: { ...customer, gst_numbers } });
+    return res.json({
+      success: true,
+      customer: {
+        ...customer,
+        column_preferences: safeParse(customer.column_preferences),
+        gst_numbers
+      }
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -245,49 +262,42 @@ exports.deleteCustomerGstNumber = async (req, res) => {
 exports.getCustomerPreviousConfig = async (req, res) => {
   try {
     const { id } = req.params;
+
+    const customer = await db.get(
+      'SELECT id, name, column_preferences FROM customers WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
+
     const lastInvoice = await db.get(
       'SELECT * FROM invoices WHERE customer_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1',
       [id, req.user.id]
     );
 
-    if (!lastInvoice) {
-      return res.json({
-        success: true,
-        hasPreviousInvoice: false,
-        column_preferences: null,
-        custom_dc_values: null,
-        in_dc_no: '',
-        out_dc_no: '',
-        items: []
-      });
+    let items = [];
+    if (lastInvoice) {
+      items = await db.query(
+        'SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no ASC, id ASC',
+        [lastInvoice.id]
+      );
     }
 
-    const items = await db.query(
-      'SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no ASC, id ASC',
-      [lastInvoice.id]
-    );
-
-    const safeParse = (val, fb = null) => {
-      if (val === null || val === undefined) return fb;
-      if (typeof val === 'object') return val;
-      if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch (e) { return fb; }
-      }
-      return fb;
-    };
+    const customerPrefs = customer ? safeParse(customer.column_preferences) : null;
+    const invoicePrefs = lastInvoice ? safeParse(lastInvoice.column_preferences) : null;
+    const resolvedPrefs = customerPrefs || invoicePrefs || null;
 
     return res.json({
       success: true,
-      hasPreviousInvoice: true,
-      lastInvoiceId: lastInvoice.id,
-      invoice_number: lastInvoice.invoice_number,
-      column_preferences: safeParse(lastInvoice.column_preferences),
-      custom_dc_values: safeParse(lastInvoice.custom_dc_values, {}),
-      in_dc_no: lastInvoice.in_dc_no || '',
-      out_dc_no: lastInvoice.out_dc_no || '',
-      payment_mode: lastInvoice.payment_mode || 'Bank Transfer',
-      notes: lastInvoice.notes || '',
-      terms: lastInvoice.terms || '',
+      hasPreviousInvoice: Boolean(lastInvoice),
+      hasCustomerConfig: Boolean(customerPrefs || invoicePrefs),
+      lastInvoiceId: lastInvoice ? lastInvoice.id : null,
+      invoice_number: lastInvoice ? lastInvoice.invoice_number : '',
+      column_preferences: resolvedPrefs,
+      custom_dc_values: lastInvoice ? safeParse(lastInvoice.custom_dc_values, {}) : {},
+      in_dc_no: lastInvoice ? (lastInvoice.in_dc_no || '') : '',
+      out_dc_no: lastInvoice ? (lastInvoice.out_dc_no || '') : '',
+      payment_mode: lastInvoice ? (lastInvoice.payment_mode || 'Bank Transfer') : 'Bank Transfer',
+      notes: lastInvoice ? (lastInvoice.notes || '') : '',
+      terms: lastInvoice ? (lastInvoice.terms || '') : '',
       items: items.map(it => ({
         product_id: it.product_id || '',
         description: it.description || '',
@@ -303,6 +313,27 @@ exports.getCustomerPreviousConfig = async (req, res) => {
     });
   } catch (error) {
     console.error('getCustomerPreviousConfig error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Save customer-specific column preferences
+exports.saveCustomerColumnPreferences = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { column_preferences } = req.body;
+    const colPrefsStr = column_preferences
+      ? (typeof column_preferences === 'string' ? column_preferences : JSON.stringify(column_preferences))
+      : null;
+
+    await db.run(
+      'UPDATE customers SET column_preferences = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+      [colPrefsStr, id, req.user.id]
+    );
+
+    return res.json({ success: true, message: 'Company column preferences saved successfully.' });
+  } catch (error) {
+    console.error('saveCustomerColumnPreferences error:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
