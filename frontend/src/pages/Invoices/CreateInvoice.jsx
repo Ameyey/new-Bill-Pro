@@ -11,6 +11,7 @@ import ColumnPreferencesModal from '../../components/ColumnPreferencesModal';
 import {
   getStoredPreferences,
   saveStoredPreferences,
+  getInvoiceEffectivePreferences,
   DEFAULT_ITEM_COLUMNS,
   DEFAULT_DC_FIELDS
 } from '../../utils/columnPreferences';
@@ -182,9 +183,9 @@ export default function CreateInvoice() {
           setPaymentStatus(inv.payment_status || 'paid');
           setPaymentMode(inv.payment_mode || 'Bank Transfer');
 
-          if (inv.column_preferences) {
-            setColumnPreferences(inv.column_preferences);
-          }
+          const effectivePrefs = getInvoiceEffectivePreferences(inv);
+          setColumnPreferences(effectivePrefs);
+
           if (inv.custom_dc_values) {
             setCustomDcValues(inv.custom_dc_values);
           }
@@ -1657,10 +1658,7 @@ export default function CreateInvoice() {
       {/* Invoice Preview Modal */}
       <InvoicePreviewModal
         isOpen={showPreview}
-        onClose={() => {
-          setShowPreview(false);
-          setColumnPreferences(getStoredPreferences());
-        }}
+        onClose={() => setShowPreview(false)}
         invoice={previewData}
         company={{ ...(company || {}), logo_url: activeLogoUrl || company?.logo_url }}
       />

@@ -4,6 +4,27 @@ const path = require('path');
 const { calculateInvoiceTotals } = require('../utils/gstCalculator');
 const { generateInvoicePdf } = require('../utils/pdfGenerator');
 
+// Safe JSON parser that handles both strings and objects (PostgreSQL returns JSONB as parsed objects)
+function safeParseJson(val, fallback = null) {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return val;
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch (e) {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+// Helper to stringify JSON safely for DB insertion
+function safeStringifyJson(val) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'string') return val;
+  return JSON.stringify(val);
+}
+
 // Get next invoice number
 exports.getNextInvoiceNumber = async (req, res) => {
   try {
@@ -65,10 +86,17 @@ exports.getInvoices = async (req, res) => {
 
     const invoices = await db.query(sql, params);
 
+    const formattedInvoices = invoices.map(inv => ({
+      ...inv,
+      column_preferences: safeParseJson(inv.column_preferences),
+      custom_dc_values: safeParseJson(inv.custom_dc_values, {}),
+      header_preferences: safeParseJson(inv.header_preferences)
+    }));
+
     return res.json({
       success: true,
-      invoices,
-      total: invoices.length
+      invoices: formattedInvoices,
+      total: formattedInvoices.length
     });
   } catch (error) {
     console.error('Get invoices error:', error);
@@ -91,18 +119,12 @@ exports.getInvoiceById = async (req, res) => {
     const company = await db.get('SELECT * FROM company_settings WHERE user_id = ?', [req.user.id]);
     const images = await db.query('SELECT * FROM invoice_images WHERE invoice_id = ? OR user_id = ?', [id, req.user.id]);
 
-    let parsedColumnPreferences = null;
-    let parsedCustomDcValues = null;
-    let parsedHeaderPreferences = null;
-    try { if (invoice.column_preferences) parsedColumnPreferences = JSON.parse(invoice.column_preferences); } catch (e) {}
-    try { if (invoice.custom_dc_values) parsedCustomDcValues = JSON.parse(invoice.custom_dc_values); } catch (e) {}
-    try { if (invoice.header_preferences) parsedHeaderPreferences = JSON.parse(invoice.header_preferences); } catch (e) {}
+    const parsedColumnPreferences = safeParseJson(invoice.column_preferences);
+    const parsedCustomDcValues = safeParseJson(invoice.custom_dc_values, {});
+    const parsedHeaderPreferences = safeParseJson(invoice.header_preferences);
 
     const parsedItems = items.map(it => {
-      let customFields = {};
-      if (it.custom_fields) {
-        try { customFields = JSON.parse(it.custom_fields); } catch (e) {}
-      }
+      const customFields = safeParseJson(it.custom_fields, {});
       return { ...customFields, ...it };
     });
 
@@ -225,9 +247,9 @@ exports.createInvoice = async (req, res) => {
 
     const finalDate = invoice_date || new Date().toISOString().split('T')[0];
 
-    const colPrefsStr = column_preferences ? JSON.stringify(column_preferences) : null;
-    const customDcStr = custom_dc_values ? JSON.stringify(custom_dc_values) : null;
-    const headerPrefsStr = header_preferences ? JSON.stringify(header_preferences) : null;
+    const colPrefsStr = safeStringifyJson(column_preferences);
+    const customDcStr = safeStringifyJson(custom_dc_values);
+    const headerPrefsStr = safeStringifyJson(header_preferences);
 
     const result = await db.run(
       `INSERT INTO invoices (
@@ -397,9 +419,9 @@ exports.updateInvoice = async (req, res) => {
       apply_gst_on_total !== undefined ? apply_gst_on_total : true
     );
 
-    const colPrefsStr = column_preferences !== undefined ? (column_preferences ? JSON.stringify(column_preferences) : null) : existing.column_preferences;
-    const customDcStr = custom_dc_values !== undefined ? (custom_dc_values ? JSON.stringify(custom_dc_values) : null) : existing.custom_dc_values;
-    const headerPrefsStr = header_preferences !== undefined ? (header_preferences ? JSON.stringify(header_preferences) : null) : existing.header_preferences;
+    const colPrefsStr = column_preferences !== undefined ? safeStringifyJson(column_preferences) : safeStringifyJson(existing.column_preferences);
+    const customDcStr = custom_dc_values !== undefined ? safeStringifyJson(custom_dc_values) : safeStringifyJson(existing.custom_dc_values);
+    const headerPrefsStr = header_preferences !== undefined ? safeStringifyJson(header_preferences) : safeStringifyJson(existing.header_preferences);
 
     await db.run(
       `UPDATE invoices SET

@@ -103,3 +103,131 @@ export function saveStoredPreferences(preferences) {
     console.error('Failed to save column preferences:', e);
   }
 }
+
+/**
+ * Resolves the effective column preferences for an invoice.
+ * Guarantees that historical invoices preserve all columns and DC fields that have data.
+ * Adding/removing/hiding columns on new bills will NEVER hide or change data on existing bills.
+ */
+export function getInvoiceEffectivePreferences(invoice) {
+  // If invoice has its own saved column_preferences, prioritize them
+  const basePrefs = invoice?.column_preferences && typeof invoice.column_preferences === 'object'
+    ? invoice.column_preferences
+    : getStoredPreferences();
+
+  // Deep clone so we do not mutate stored preferences
+  let prefs;
+  try {
+    prefs = JSON.parse(JSON.stringify(basePrefs || {}));
+  } catch (e) {
+    prefs = {};
+  }
+
+  // Ensure default structures exist
+  if (!Array.isArray(prefs.itemColumns) || prefs.itemColumns.length === 0) {
+    prefs.itemColumns = JSON.parse(JSON.stringify(DEFAULT_ITEM_COLUMNS));
+  }
+  if (!Array.isArray(prefs.dcFields) || prefs.dcFields.length === 0) {
+    prefs.dcFields = JSON.parse(JSON.stringify(DEFAULT_DC_FIELDS));
+  }
+
+  // HISTORICAL PRESERVATION GUARANTEE:
+  // If this invoice historically contains data in any DC field, ensure that field is VISIBLE!
+  if (invoice) {
+    // 1. Core DC fields
+    const dcDataChecks = [
+      { id: 'invoice_no', hasData: Boolean(invoice.invoice_number) },
+      { id: 'invoice_date', hasData: Boolean(invoice.invoice_date) },
+      { id: 'in_dc_no', hasData: Boolean(invoice.in_dc_no && String(invoice.in_dc_no).trim()) },
+      { id: 'in_dc_date', hasData: Boolean(invoice.in_dc_date && String(invoice.in_dc_date).trim()) },
+      { id: 'out_dc_no', hasData: Boolean(invoice.out_dc_no && String(invoice.out_dc_no).trim()) },
+      { id: 'out_dc_date', hasData: Boolean(invoice.out_dc_date && String(invoice.out_dc_date).trim()) }
+    ];
+
+    dcDataChecks.forEach(({ id, hasData }) => {
+      if (hasData) {
+        let field = prefs.dcFields.find(f => f.id === id);
+        if (field) {
+          field.visible = true;
+        } else {
+          // If field was deleted from template, restore it from defaults as visible
+          const defaultField = DEFAULT_DC_FIELDS.find(f => f.id === id);
+          if (defaultField) {
+            prefs.dcFields.push({ ...defaultField, visible: true });
+          }
+        }
+      }
+    });
+
+    // 2. Custom DC values
+    const customValues = invoice.custom_dc_values || {};
+    if (typeof customValues === 'object') {
+      Object.entries(customValues).forEach(([k, v]) => {
+        if (v !== null && v !== undefined && String(v).trim().length > 0) {
+          const field = prefs.dcFields.find(f => f.id === k || f.key === k);
+          if (field) {
+            field.visible = true;
+          } else {
+            // Restore custom field into list so its label and value render
+            prefs.dcFields.push({
+              id: k,
+              key: k,
+              label: k.replace(/_/g, ' ').toUpperCase(),
+              visible: true,
+              isCustom: true
+            });
+          }
+        }
+      });
+    }
+
+    // 3. Product / Item Columns preservation
+    if (Array.isArray(invoice.items) && invoice.items.length > 0) {
+      // Check sq_ft
+      const hasSqFt = invoice.items.some(it => it.sq_ft !== null && it.sq_ft !== undefined && String(it.sq_ft).trim() !== '' && Number(it.sq_ft) !== 0);
+      if (hasSqFt) {
+        let col = prefs.itemColumns.find(c => c.id === 'sq_ft');
+        if (col) col.visible = true;
+        else {
+          const def = DEFAULT_ITEM_COLUMNS.find(c => c.id === 'sq_ft');
+          if (def) prefs.itemColumns.push({ ...def, visible: true });
+        }
+      }
+
+      // Check unit
+      const hasUnit = invoice.items.some(it => it.unit && String(it.unit).trim().length > 0);
+      if (hasUnit) {
+        let col = prefs.itemColumns.find(c => c.id === 'unit');
+        if (col) col.visible = true;
+        else {
+          const def = DEFAULT_ITEM_COLUMNS.find(c => c.id === 'unit');
+          if (def) prefs.itemColumns.push({ ...def, visible: true });
+        }
+      }
+
+      // Check discount
+      const hasDisc = invoice.items.some(it => it.discount !== null && it.discount !== undefined && Number(it.discount) > 0);
+      if (hasDisc) {
+        let col = prefs.itemColumns.find(c => c.id === 'discount');
+        if (col) col.visible = true;
+        else {
+          const def = DEFAULT_ITEM_COLUMNS.find(c => c.id === 'discount');
+          if (def) prefs.itemColumns.push({ ...def, visible: true });
+        }
+      }
+
+      // Check gst_rate
+      const hasGst = invoice.items.some(it => it.gst_rate !== null && it.gst_rate !== undefined && String(it.gst_rate).trim() !== '');
+      if (hasGst) {
+        let col = prefs.itemColumns.find(c => c.id === 'gst_rate');
+        if (col) col.visible = true;
+        else {
+          const def = DEFAULT_ITEM_COLUMNS.find(c => c.id === 'gst_rate');
+          if (def) prefs.itemColumns.push({ ...def, visible: true });
+        }
+      }
+    }
+  }
+
+  return prefs;
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
-import { getStoredPreferences } from '../../utils/columnPreferences';
+import { getStoredPreferences, getInvoiceEffectivePreferences } from '../../utils/columnPreferences';
 
 export default function ModernGstTemplate({ invoice, company, headerPreferences }) {
   if (!invoice) return null;
@@ -13,18 +13,18 @@ export default function ModernGstTemplate({ invoice, company, headerPreferences 
     comp.company_name = invoice.company.company_name;
   }
   const items = invoice.items || [];
-  const prefs = invoice.column_preferences || getStoredPreferences();
+  const prefs = getInvoiceEffectivePreferences(invoice);
   const visibleCols = (prefs?.itemColumns || []).filter(c => c.visible && c.id !== 'catalog');
 
   const inDcField = prefs?.dcFields?.find(f => f.id === 'in_dc_no');
-  const showInDc = Boolean(inDcField && inDcField.visible);
+  const showInDc = Boolean((inDcField && inDcField.visible) || (invoice.in_dc_no && String(invoice.in_dc_no).trim()));
   const inDcDateField = prefs?.dcFields?.find(f => f.id === 'in_dc_date');
-  const showInDcDate = Boolean(inDcDateField && inDcDateField.visible);
+  const showInDcDate = Boolean((inDcDateField && inDcDateField.visible) || (invoice.in_dc_date && String(invoice.in_dc_date).trim()));
 
   const outDcField = prefs?.dcFields?.find(f => f.id === 'out_dc_no');
-  const showOutDc = Boolean(outDcField && outDcField.visible);
+  const showOutDc = Boolean((outDcField && outDcField.visible) || (invoice.out_dc_no && String(invoice.out_dc_no).trim()));
   const outDcDateField = prefs?.dcFields?.find(f => f.id === 'out_dc_date');
-  const showOutDcDate = Boolean(outDcDateField && outDcDateField.visible);
+  const showOutDcDate = Boolean((outDcDateField && outDcDateField.visible) || (invoice.out_dc_date && String(invoice.out_dc_date).trim()));
 
   const customDcRows = (prefs?.dcFields || []).filter(f => f.isCustom && f.visible);
 
