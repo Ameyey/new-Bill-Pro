@@ -7,11 +7,13 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5050',
+        // target: 'http://localhost:5050',
+        target:'https://new-bill-pro-m1lx.vercel.app/',
         changeOrigin: true
       },
       '/uploads': {
-        target: 'http://localhost:5050',
+        // target: 'http://localhost:5050',
+        target:'https://new-bill-pro-m1lx.vercel.app/',
         changeOrigin: true
       }
     }
