@@ -38,6 +38,7 @@ function calculateInvoiceTotals(
     totalGst += lineGst;
 
     return {
+      ...item,
       item_no: item.item_no || index + 1,
       product_id: item.product_id || null,
       description: item.description || '',

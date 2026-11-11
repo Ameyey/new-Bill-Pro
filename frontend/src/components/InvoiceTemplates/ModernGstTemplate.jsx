@@ -14,7 +14,10 @@ export default function ModernGstTemplate({ invoice, company, headerPreferences 
   }
   const items = invoice.items || [];
   const prefs = getInvoiceEffectivePreferences(invoice);
-  const visibleCols = (prefs?.itemColumns || []).filter(c => c.visible && c.id !== 'catalog');
+  const rawVisibleCols = (prefs?.itemColumns || []).filter(c => c.visible && c.id !== 'catalog');
+  const existingTotal = rawVisibleCols.find(c => c.id === 'total');
+  const totalCol = existingTotal || { id: 'total', key: 'total', label: 'Total (₹)', defaultLabel: 'Total (₹)', visible: true };
+  const visibleCols = [...rawVisibleCols.filter(c => c.id !== 'total'), totalCol];
 
   const inDcField = prefs?.dcFields?.find(f => f.id === 'in_dc_no');
   const showInDc = Boolean((inDcField && inDcField.visible) || (invoice.in_dc_no && String(invoice.in_dc_no).trim()));
@@ -353,7 +356,7 @@ export default function ModernGstTemplate({ invoice, company, headerPreferences 
                 // Custom columns
                 return (
                   <td key={col.id} className="py-2.5 px-2 text-center font-mono">
-                    {item[col.key] || '-'}
+                    {item[col.key] ?? item[col.id] ?? '-'}
                   </td>
                 );
               })}

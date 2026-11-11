@@ -3,7 +3,8 @@ import Modal from './Modal';
 import {
   DEFAULT_ITEM_COLUMNS,
   DEFAULT_DC_FIELDS,
-  saveStoredPreferences
+  saveStoredPreferences,
+  normalizeItemColumns
 } from '../utils/columnPreferences';
 import {
   SlidersHorizontal,
@@ -40,8 +41,16 @@ export default function ColumnPreferencesModal({
 
   useEffect(() => {
     if (initialPreferences) {
-      setItemColumns(JSON.parse(JSON.stringify(initialPreferences.itemColumns || DEFAULT_ITEM_COLUMNS)));
-      setDcFields(JSON.parse(JSON.stringify(initialPreferences.dcFields || DEFAULT_DC_FIELDS)));
+      const rawCols = initialPreferences.itemColumns || DEFAULT_ITEM_COLUMNS;
+      const rawDc = initialPreferences.dcFields || DEFAULT_DC_FIELDS;
+      setItemColumns(normalizeItemColumns(rawCols).map(c => ({
+        ...c,
+        deletable: c.isCustom ? true : c.deletable !== undefined ? c.deletable : (!c.required && !c.fixed)
+      })));
+      setDcFields(JSON.parse(JSON.stringify(rawDc)).map(f => ({
+        ...f,
+        deletable: f.isCustom ? true : f.deletable !== undefined ? f.deletable : (!f.required && !f.fixed)
+      })));
     }
     setActiveTab(activeTabDefault);
   }, [initialPreferences, isOpen, activeTabDefault]);
@@ -64,7 +73,7 @@ export default function ColumnPreferencesModal({
   };
 
   const handleDeleteItemColumn = (id) => {
-    setItemColumns(prev => prev.filter(col => col.id !== id));
+    setItemColumns(prev => normalizeItemColumns(prev.filter(col => col.id !== id)));
   };
 
   const handleAddNewItemColumn = (e) => {
@@ -85,17 +94,7 @@ export default function ColumnPreferencesModal({
       width: 'w-24 text-center'
     };
 
-    setItemColumns(prev => {
-      // Insert right before 'total' column
-      const totalIdx = prev.findIndex(c => c.id === 'total');
-      if (totalIdx !== -1) {
-        const copy = [...prev];
-        copy.splice(totalIdx, 0, newCol);
-        return copy;
-      }
-      return [...prev, newCol];
-    });
-
+    setItemColumns(prev => normalizeItemColumns([...prev, newCol]));
     setNewItemColName('');
   };
 
@@ -142,14 +141,14 @@ export default function ColumnPreferencesModal({
   // --- Reset & Save ---
   const handleResetToDefault = () => {
     if (window.confirm('Reset all columns and DC fields to default layout?')) {
-      setItemColumns(JSON.parse(JSON.stringify(DEFAULT_ITEM_COLUMNS)));
+      setItemColumns(normalizeItemColumns(DEFAULT_ITEM_COLUMNS));
       setDcFields(JSON.parse(JSON.stringify(DEFAULT_DC_FIELDS)));
     }
   };
 
   const handleSavePreferences = () => {
     const preferences = {
-      itemColumns,
+      itemColumns: normalizeItemColumns(itemColumns),
       dcFields,
       headerPreferences: initialPreferences?.headerPreferences
     };
@@ -267,12 +266,12 @@ export default function ColumnPreferencesModal({
 
                       {/* Delete Action */}
                       <td className="py-2 px-3 text-center">
-                        {col.deletable ? (
+                        {col.isCustom || (col.deletable !== false && !col.required && !col.fixed) ? (
                           <button
                             type="button"
                             onClick={() => handleDeleteItemColumn(col.id)}
                             title="Delete this column"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -344,7 +343,7 @@ export default function ColumnPreferencesModal({
                   <button
                     type="button"
                     onClick={() => {
-                      setItemColumns(prev => [...prev, ...JSON.parse(JSON.stringify(missingDefaultItemColumns))]);
+                      setItemColumns(prev => normalizeItemColumns([...prev, ...JSON.parse(JSON.stringify(missingDefaultItemColumns))]));
                     }}
                     className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline"
                   >
@@ -356,15 +355,7 @@ export default function ColumnPreferencesModal({
                     <button
                       key={col.id}
                       type="button"
-                      onClick={() => setItemColumns(prev => {
-                        const copy = [...prev];
-                        const totalIdx = copy.findIndex(c => c.id === 'total');
-                        if (totalIdx !== -1) {
-                          copy.splice(totalIdx, 0, JSON.parse(JSON.stringify(col)));
-                          return copy;
-                        }
-                        return [...copy, JSON.parse(JSON.stringify(col))];
-                      })}
+                      onClick={() => setItemColumns(prev => normalizeItemColumns([...prev, JSON.parse(JSON.stringify(col))]))}
                       className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs"
                     >
                       <Plus className="w-3 h-3 text-blue-600" />
@@ -440,12 +431,12 @@ export default function ColumnPreferencesModal({
 
                       {/* Delete Action */}
                       <td className="py-2 px-3 text-center">
-                        {field.deletable ? (
+                        {field.isCustom || (field.deletable !== false && !field.required && !field.fixed) ? (
                           <button
                             type="button"
                             onClick={() => handleDeleteDcField(field.id)}
                             title="Delete this field"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

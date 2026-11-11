@@ -16,6 +16,54 @@ async function createSchema() {
     } else {
       console.log('[Supabase PostgreSQL] All tables verified in Supabase.');
     }
+
+    // Clean up phantom / deleted custom DC columns from customers and invoices
+    try {
+      const custsWithPrefs = await db.query("SELECT id, column_preferences FROM customers WHERE column_preferences IS NOT NULL");
+      for (const c of (custsWithPrefs || [])) {
+        let prefs = c.column_preferences;
+        if (typeof prefs === 'string') {
+          try { prefs = JSON.parse(prefs); } catch(e){}
+        }
+        if (prefs && Array.isArray(prefs.dcFields)) {
+          const originalLen = prefs.dcFields.length;
+          prefs.dcFields = prefs.dcFields.filter(f => {
+            if (!f.isCustom) return true;
+            if (!f.label || !f.label.trim()) return false;
+            if (f.id?.includes('1794281193756') || f.id?.includes('1794281232013')) return false;
+            if (f.key?.includes('1794281193756') || f.key?.includes('1794281232013')) return false;
+            return true;
+          }).map(f => f.isCustom ? { ...f, deletable: true } : f);
+
+          if (prefs.dcFields.length !== originalLen) {
+            await db.run("UPDATE customers SET column_preferences = ? WHERE id = ?", [JSON.stringify(prefs), c.id]);
+          }
+        }
+      }
+
+      const invs = await db.query("SELECT id, custom_dc_values FROM invoices WHERE custom_dc_values IS NOT NULL");
+      for (const inv of (invs || [])) {
+        let vals = inv.custom_dc_values;
+        if (typeof vals === 'string') {
+          try { vals = JSON.parse(vals); } catch(e){}
+        }
+        if (vals && typeof vals === 'object') {
+          let changed = false;
+          Object.keys(vals).forEach(k => {
+            if (k.includes('1794281193756') || k.includes('1794281232013')) {
+              delete vals[k];
+              changed = true;
+            }
+          });
+          if (changed) {
+            await db.run("UPDATE invoices SET custom_dc_values = ? WHERE id = ?", [JSON.stringify(vals), inv.id]);
+          }
+        }
+      }
+    } catch (cleanErr) {
+      console.warn('Phantom column cleanup warning:', cleanErr);
+    }
+
     return;
   }
 

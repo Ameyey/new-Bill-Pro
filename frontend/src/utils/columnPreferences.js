@@ -50,12 +50,96 @@ export const DEFAULT_HEADER_PREFERENCES = {
 export const STORAGE_KEY = 'billpro_column_preferences';
 export const CUSTOMER_PREFS_PREFIX = 'billpro_company_prefs_';
 
+/**
+ * Normalizes item columns to guarantee:
+ * 1. 'Total (₹)' is ALWAYS the final rightmost column.
+ * 2. Standard columns follow logical business order:
+ *    [item_no, catalog, description, sq_ft, (custom_columns), quantity, unit, rate, discount, gst_rate, total]
+ * 3. Never duplicates columns or leaves unit/discount/gst after total.
+ */
+export function normalizeItemColumns(columns) {
+  if (!Array.isArray(columns) || columns.length === 0) {
+    return JSON.parse(JSON.stringify(DEFAULT_ITEM_COLUMNS));
+  }
+
+  // Find or construct the fixed total column
+  const existingTotal = columns.find(c => c.id === 'total');
+  const defaultTotal = DEFAULT_ITEM_COLUMNS.find(c => c.id === 'total');
+  const totalCol = {
+    ...defaultTotal,
+    ...(existingTotal || {}),
+    id: 'total',
+    key: 'total',
+    label: existingTotal?.label || 'Total (₹)',
+    defaultLabel: 'Total (₹)',
+    visible: true,
+    fixed: true,
+    deletable: false,
+    width: 'w-24 text-right'
+  };
+
+  const STANDARD_WEIGHTS = {
+    item_no: 10,
+    catalog: 20,
+    description: 30,
+    sq_ft: 40,
+    quantity: 60,
+    unit: 70,
+    rate: 80,
+    discount: 90,
+    gst_rate: 100
+  };
+
+  const withoutTotal = columns.filter(c => c.id !== 'total');
+  const standardCols = [];
+  const customCols = [];
+
+  withoutTotal.forEach(col => {
+    if (STANDARD_WEIGHTS[col.id] !== undefined) {
+      const def = DEFAULT_ITEM_COLUMNS.find(d => d.id === col.id);
+      standardCols.push({
+        ...def,
+        ...col,
+        weight: STANDARD_WEIGHTS[col.id]
+      });
+    } else {
+      customCols.push({
+        ...col,
+        isCustom: true,
+        deletable: true,
+        weight: 50 // Placed between sq_ft (40) and quantity (60)
+      });
+    }
+  });
+
+  standardCols.sort((a, b) => a.weight - b.weight);
+
+  const beforeCustom = standardCols.filter(c => c.weight <= 40);
+  const afterCustom = standardCols.filter(c => c.weight >= 60);
+
+  const cleanItem = (c) => {
+    const { weight, ...rest } = c;
+    return rest;
+  };
+
+  return [
+    ...beforeCustom.map(cleanItem),
+    ...customCols.map(cleanItem),
+    ...afterCustom.map(cleanItem),
+    totalCol
+  ];
+}
+
 export function getCompanyColumnPreferences(companyId) {
   if (!companyId) return null;
   try {
     const raw = localStorage.getItem(`${CUSTOMER_PREFS_PREFIX}${companyId}`);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.itemColumns)) {
+        parsed.itemColumns = normalizeItemColumns(parsed.itemColumns);
+      }
+      return parsed;
     }
   } catch (e) {}
   return null;
@@ -64,7 +148,11 @@ export function getCompanyColumnPreferences(companyId) {
 export function saveCompanyColumnPreferences(companyId, preferences) {
   if (!companyId || !preferences) return;
   try {
-    localStorage.setItem(`${CUSTOMER_PREFS_PREFIX}${companyId}`, JSON.stringify(preferences));
+    const toSave = {
+      ...preferences,
+      itemColumns: preferences.itemColumns ? normalizeItemColumns(preferences.itemColumns) : undefined
+    };
+    localStorage.setItem(`${CUSTOMER_PREFS_PREFIX}${companyId}`, JSON.stringify(toSave));
   } catch (e) {}
 }
 
@@ -80,9 +168,7 @@ export function getStoredPreferences() {
     }
     const parsed = JSON.parse(raw);
     return {
-      itemColumns: Array.isArray(parsed.itemColumns) 
-        ? parsed.itemColumns
-        : DEFAULT_ITEM_COLUMNS,
+      itemColumns: normalizeItemColumns(parsed.itemColumns),
       dcFields: Array.isArray(parsed.dcFields) 
         ? parsed.dcFields.map(f => {
             if (f.label === 'Invoice .No') return { ...f, label: 'Invoice No.', defaultLabel: 'Invoice No.' };
@@ -109,7 +195,7 @@ export function saveStoredPreferences(preferences) {
   try {
     const existing = getStoredPreferences();
     const merged = {
-      itemColumns: preferences.itemColumns || existing.itemColumns,
+      itemColumns: normalizeItemColumns(preferences.itemColumns || existing.itemColumns),
       dcFields: preferences.dcFields || existing.dcFields,
       headerPreferences: {
         ...existing.headerPreferences,
@@ -125,16 +211,20 @@ export function saveStoredPreferences(preferences) {
 
 /**
  * Resolves the effective column preferences for an invoice.
- * Guarantees that historical invoices preserve all columns and DC fields that have data.
- * Adding/removing/hiding columns on new bills will NEVER hide or change data on existing bills.
+ * Guarantees that historical invoices preserve columns that have data,
+ * while respecting any explicit user customization on new bills and templates.
  */
 export function getInvoiceEffectivePreferences(invoice) {
-  // If invoice has its own saved column_preferences, prioritize them
-  const basePrefs = invoice?.column_preferences && typeof invoice.column_preferences === 'object'
+  const hasExplicitPrefs = Boolean(
+    invoice?.column_preferences &&
+    typeof invoice.column_preferences === 'object' &&
+    Array.isArray(invoice.column_preferences.itemColumns)
+  );
+
+  const basePrefs = hasExplicitPrefs
     ? invoice.column_preferences
     : getStoredPreferences();
 
-  // Deep clone so we do not mutate stored preferences
   let prefs;
   try {
     prefs = JSON.parse(JSON.stringify(basePrefs || {}));
@@ -142,18 +232,20 @@ export function getInvoiceEffectivePreferences(invoice) {
     prefs = {};
   }
 
-  // Ensure default structures exist
+  // Ensure default structures exist and are normalized
   if (!Array.isArray(prefs.itemColumns) || prefs.itemColumns.length === 0) {
     prefs.itemColumns = JSON.parse(JSON.stringify(DEFAULT_ITEM_COLUMNS));
+  } else {
+    prefs.itemColumns = normalizeItemColumns(prefs.itemColumns);
   }
   if (!Array.isArray(prefs.dcFields) || prefs.dcFields.length === 0) {
     prefs.dcFields = JSON.parse(JSON.stringify(DEFAULT_DC_FIELDS));
   }
 
-  // HISTORICAL PRESERVATION GUARANTEE:
-  // If this invoice historically contains data in any DC field, ensure that field is VISIBLE!
   if (invoice) {
-    // 1. Core DC fields
+    // 1. Core DC fields preservation on saved invoices with an id
+    const isSavedHistoricalBill = Boolean(invoice.id);
+
     const dcDataChecks = [
       { id: 'invoice_no', hasData: Boolean(invoice.invoice_number) },
       { id: 'invoice_date', hasData: Boolean(invoice.invoice_date) },
@@ -167,9 +259,11 @@ export function getInvoiceEffectivePreferences(invoice) {
       if (hasData) {
         let field = prefs.dcFields.find(f => f.id === id);
         if (field) {
-          field.visible = true;
-        } else {
-          // If field was deleted from template, restore it from defaults as visible
+          // If field exists, only force visible if historical bill without explicit prefs
+          if (!hasExplicitPrefs || isSavedHistoricalBill) {
+            field.visible = true;
+          }
+        } else if (isSavedHistoricalBill) {
           const defaultField = DEFAULT_DC_FIELDS.find(f => f.id === id);
           if (defaultField) {
             prefs.dcFields.push({ ...defaultField, visible: true });
@@ -178,31 +272,40 @@ export function getInvoiceEffectivePreferences(invoice) {
       }
     });
 
-    // 2. Custom DC values
+    // 2. Custom DC values (Only preserve on existing historical saved invoices with an id)
     const customValues = invoice.custom_dc_values || {};
-    if (typeof customValues === 'object') {
+    if (isSavedHistoricalBill && typeof customValues === 'object') {
       Object.entries(customValues).forEach(([k, v]) => {
         if (v !== null && v !== undefined && String(v).trim().length > 0) {
           const field = prefs.dcFields.find(f => f.id === k || f.key === k);
           if (field) {
             field.visible = true;
+            field.deletable = true;
           } else {
-            // Restore custom field into list so its label and value render
-            prefs.dcFields.push({
-              id: k,
-              key: k,
-              label: k.replace(/_/g, ' ').toUpperCase(),
-              visible: true,
-              isCustom: true
-            });
+            const cleanLabel = k.replace(/^custom_dc_/i, '').replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase();
+            if (cleanLabel) {
+              prefs.dcFields.push({
+                id: k,
+                key: k,
+                label: cleanLabel,
+                visible: true,
+                isCustom: true,
+                deletable: true
+              });
+            }
           }
         }
       });
     }
 
-    // 3. Product / Item Columns preservation
-    if (Array.isArray(invoice.items) && invoice.items.length > 0) {
-      // Check sq_ft
+    // Filter out any custom DC fields that have empty or blank labels
+    prefs.dcFields = (prefs.dcFields || []).filter(f => !f.isCustom || (f.label && f.label.trim().length > 0));
+    prefs.dcFields = prefs.dcFields.map(f => f.isCustom ? { ...f, deletable: true } : f);
+
+    // 3. Product / Item Columns preservation:
+    // If the invoice already has explicit column_preferences, RESPECT THEM (do not force deleted columns back!)
+    // Only resurrect missing columns if it's a saved historical bill that lacked saved column_preferences!
+    if (isSavedHistoricalBill && !hasExplicitPrefs && Array.isArray(invoice.items) && invoice.items.length > 0) {
       const hasSqFt = invoice.items.some(it => it.sq_ft !== null && it.sq_ft !== undefined && String(it.sq_ft).trim() !== '' && Number(it.sq_ft) !== 0);
       if (hasSqFt) {
         let col = prefs.itemColumns.find(c => c.id === 'sq_ft');
@@ -213,7 +316,6 @@ export function getInvoiceEffectivePreferences(invoice) {
         }
       }
 
-      // Check unit
       const hasUnit = invoice.items.some(it => it.unit && String(it.unit).trim().length > 0);
       if (hasUnit) {
         let col = prefs.itemColumns.find(c => c.id === 'unit');
@@ -224,7 +326,6 @@ export function getInvoiceEffectivePreferences(invoice) {
         }
       }
 
-      // Check discount
       const hasDisc = invoice.items.some(it => it.discount !== null && it.discount !== undefined && Number(it.discount) > 0);
       if (hasDisc) {
         let col = prefs.itemColumns.find(c => c.id === 'discount');
@@ -235,7 +336,6 @@ export function getInvoiceEffectivePreferences(invoice) {
         }
       }
 
-      // Check gst_rate
       const hasGst = invoice.items.some(it => it.gst_rate !== null && it.gst_rate !== undefined && String(it.gst_rate).trim() !== '');
       if (hasGst) {
         let col = prefs.itemColumns.find(c => c.id === 'gst_rate');
@@ -245,8 +345,36 @@ export function getInvoiceEffectivePreferences(invoice) {
           if (def) prefs.itemColumns.push({ ...def, visible: true });
         }
       }
+
+      // Check for any custom item properties
+      invoice.items.forEach(it => {
+        if (!it || typeof it !== 'object') return;
+        Object.keys(it).forEach(k => {
+          if (k.startsWith('custom_') && it[k] !== null && it[k] !== undefined && String(it[k]).trim().length > 0) {
+            let col = prefs.itemColumns.find(c => c.key === k || c.id === k);
+            if (!col) {
+              const cleanLabel = k.replace(/^custom_/i, '').replace(/_\d+$/, '').replace(/_/g, ' ').toUpperCase();
+              prefs.itemColumns.push({
+                id: k,
+                key: k,
+                label: cleanLabel || 'Custom',
+                defaultLabel: cleanLabel || 'Custom',
+                visible: true,
+                deletable: true,
+                isCustom: true,
+                width: 'w-24 text-center'
+              });
+            } else {
+              col.visible = true;
+            }
+          }
+        });
+      });
     }
   }
+
+  // Always ensure strict normalized order with 'total' as the final rightmost column
+  prefs.itemColumns = normalizeItemColumns(prefs.itemColumns);
 
   return prefs;
 }

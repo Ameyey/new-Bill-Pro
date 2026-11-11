@@ -15,7 +15,13 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
 
   const items = invoice.items || [];
   const prefs = getInvoiceEffectivePreferences(invoice);
-  const visibleCols = (prefs?.itemColumns || []).filter(c => c.visible && c.id !== 'catalog');
+  // Guarantee total is ALWAYS the final column in visibleCols
+  const rawVisibleCols = (prefs?.itemColumns || []).filter(c => c.visible && c.id !== 'catalog');
+  const existingTotal = rawVisibleCols.find(c => c.id === 'total');
+  const totalCol = existingTotal || { id: 'total', key: 'total', label: 'Total (₹)', defaultLabel: 'Total (₹)', visible: true };
+  const visibleCols = [...rawVisibleCols.filter(c => c.id !== 'total'), totalCol];
+  const totalColIndex = visibleCols.length - 1;
+  const labelColIndex = Math.max(0, visibleCols.length - 2);
 
   const headerPrefs = headerPreferences || invoice.header_preferences || prefs.headerPreferences || {
     showLogo: true,
@@ -547,19 +553,51 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="border-b-2 border-black font-bold text-center bg-slate-50">
-              {visibleCols.map((col, cIdx) => (
-                <th
-                  key={col.id}
-                  className={`py-1.5 ${cIdx !== visibleCols.length - 1 ? 'border-r border-black' : ''} ${col.id === 'item_no' ? 'w-10' :
-                    col.id === 'description' ? 'px-2 text-left' :
-                      col.id === 'total' ? 'w-24 text-right pr-2' :
-                        cIdx === visibleCols.length - 2 ? 'w-20 min-w-[75px]' :
-                          'w-16'
-                    }`}
-                >
-                  {col.label}
-                </th>
-              ))}
+              {visibleCols.map((col, cIdx) => {
+                const isLast = cIdx === visibleCols.length - 1;
+                const isLabelCol = cIdx === labelColIndex;
+                const borderClass = isLast ? '' : 'border-r border-black';
+                let widthClass = 'w-16';
+                let alignClass = 'text-center';
+
+                if (col.id === 'item_no') {
+                  widthClass = 'w-10';
+                  alignClass = 'text-center';
+                } else if (col.id === 'description') {
+                  widthClass = '';
+                  alignClass = 'px-2 text-left';
+                } else if (isLast || col.id === 'total') {
+                  widthClass = 'w-24 min-w-[90px]';
+                  alignClass = 'text-right pr-2';
+                } else if (isLabelCol) {
+                  widthClass = 'w-20 min-w-[75px]';
+                  alignClass = 'text-center';
+                } else if (col.id === 'unit') {
+                  widthClass = 'w-14';
+                  alignClass = 'text-center';
+                } else if (col.id === 'rate') {
+                  widthClass = 'w-20';
+                  alignClass = 'text-right pr-1.5';
+                } else if (col.id === 'discount') {
+                  widthClass = 'w-16';
+                  alignClass = 'text-right pr-1.5';
+                } else if (col.id === 'gst_rate') {
+                  widthClass = 'w-16';
+                  alignClass = 'text-center';
+                } else if (col.id === 'quantity') {
+                  widthClass = 'w-16';
+                  alignClass = 'text-center';
+                }
+
+                return (
+                  <th
+                    key={col.id}
+                    className={`py-1.5 ${borderClass} ${widthClass} ${alignClass}`}
+                  >
+                    {col.label}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -606,14 +644,14 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                   }
                   if (col.id === 'rate') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] text-right pr-1.5`}>
                         {item ? item.rate : ''}
                       </td>
                     );
                   }
                   if (col.id === 'discount') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] text-right pr-1.5`}>
                         {item && item.discount > 0 ? item.discount : ''}
                       </td>
                     );
@@ -627,7 +665,7 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                   }
                   if (col.id === 'total') {
                     return (
-                      <td key={col.id} className="text-right pr-2 font-mono text-[11px] font-semibold">
+                      <td key={col.id} className={`${borderClass} text-right pr-2 font-mono text-[11px] font-semibold`}>
                         {item ? formatNumber(item.total_amount || (item.quantity * item.rate)) : '0'}
                       </td>
                     );
@@ -636,20 +674,19 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                   // Custom column (e.g. HSN/SAC, Batch No)
                   return (
                     <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
-                      {item ? item[col.key] || '' : ''}
+                      {item ? (item[col.key] ?? item[col.id] ?? '') : ''}
                     </td>
                   );
                 })}
               </tr>
             ))}
 
-            {/* 1. Subtotal / Total Row (Exact Image 2 format) */}
+            {/* 1. Subtotal / Total Row */}
             <tr className="border-t-2 border-black font-bold text-xs h-[22px]">
               {visibleCols.map((col, cIdx) => {
                 const isLast = cIdx === visibleCols.length - 1;
-                const totalColIndex = visibleCols.findIndex(c => c.id === 'total');
-                const labelColIndex = totalColIndex > 0 ? totalColIndex - 1 : visibleCols.length - 2;
                 const isLabelCol = cIdx === labelColIndex;
+                const isTotalCol = cIdx === totalColIndex;
                 const borderClass = isLast ? '' : 'border-r border-black';
                 if (isLabelCol) {
                   return (
@@ -658,7 +695,7 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                     </td>
                   );
                 }
-                if (isLast) {
+                if (isTotalCol) {
                   return (
                     <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
                       {formatNumber(taxable)}
@@ -689,16 +726,17 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                 <tr className="border-b border-slate-200 font-bold text-xs h-[21px]">
                   {visibleCols.map((col, cIdx) => {
                     const isLast = cIdx === visibleCols.length - 1;
-                    const isSecondLast = cIdx === visibleCols.length - 2;
+                    const isLabelCol = cIdx === labelColIndex;
+                    const isTotalCol = cIdx === totalColIndex;
                     const borderClass = isLast ? '' : 'border-r border-black';
-                    if (isSecondLast) {
+                    if (isLabelCol) {
                       return (
                         <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs whitespace-nowrap`}>
                           CGST {cgstRate}%
                         </td>
                       );
                     }
-                    if (isLast) {
+                    if (isTotalCol) {
                       return (
                         <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
                           {formatNumber(cgstAmt)}
@@ -712,16 +750,17 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                 <tr className="border-b border-slate-200 font-bold text-xs h-[21px]">
                   {visibleCols.map((col, cIdx) => {
                     const isLast = cIdx === visibleCols.length - 1;
-                    const isSecondLast = cIdx === visibleCols.length - 2;
+                    const isLabelCol = cIdx === labelColIndex;
+                    const isTotalCol = cIdx === totalColIndex;
                     const borderClass = isLast ? '' : 'border-r border-black';
-                    if (isSecondLast) {
+                    if (isLabelCol) {
                       return (
                         <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs whitespace-nowrap`}>
                           SGST {sgstRate}%
                         </td>
                       );
                     }
-                    if (isLast) {
+                    if (isTotalCol) {
                       return (
                         <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
                           {formatNumber(sgstAmt)}
@@ -736,16 +775,17 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
               <tr className="border-b border-slate-200 font-bold text-xs h-[21px]">
                 {visibleCols.map((col, cIdx) => {
                   const isLast = cIdx === visibleCols.length - 1;
-                  const isSecondLast = cIdx === visibleCols.length - 2;
+                  const isLabelCol = cIdx === labelColIndex;
+                  const isTotalCol = cIdx === totalColIndex;
                   const borderClass = isLast ? '' : 'border-r border-black';
-                  if (isSecondLast) {
+                  if (isLabelCol) {
                     return (
                       <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs whitespace-nowrap`}>
                         IGST {igstRate}%
                       </td>
                     );
                   }
-                  if (isLast) {
+                  if (isTotalCol) {
                     return (
                       <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
                         {formatNumber(igstAmt)}
@@ -757,20 +797,21 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
               </tr>
             )}
 
-            {/* 6. Grand Total Row (Exact Image 2 format) */}
+            {/* 6. Grand Total Row */}
             <tr className="border-t-2 border-black font-bold h-[26px] bg-slate-50/30">
               {visibleCols.map((col, cIdx) => {
                 const isLast = cIdx === visibleCols.length - 1;
-                const isSecondLast = cIdx === visibleCols.length - 2;
+                const isLabelCol = cIdx === labelColIndex;
+                const isTotalCol = cIdx === totalColIndex;
                 const borderClass = isLast ? '' : 'border-r border-black';
-                if (isSecondLast) {
+                if (isLabelCol) {
                   return (
                     <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs`}>
                       Total
                     </td>
                   );
                 }
-                if (isLast) {
+                if (isTotalCol) {
                   return (
                     <td key={col.id} className="text-right pr-2 font-mono font-black text-sm">
                       {formatNumber(grandTotal)}

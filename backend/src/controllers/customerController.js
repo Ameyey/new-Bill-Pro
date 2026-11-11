@@ -283,7 +283,27 @@ exports.getCustomerPreviousConfig = async (req, res) => {
 
     const customerPrefs = customer ? safeParse(customer.column_preferences) : null;
     const invoicePrefs = lastInvoice ? safeParse(lastInvoice.column_preferences) : null;
-    const resolvedPrefs = customerPrefs || invoicePrefs || null;
+    let resolvedPrefs = customerPrefs || invoicePrefs || null;
+
+    if (resolvedPrefs && Array.isArray(resolvedPrefs.dcFields)) {
+      resolvedPrefs.dcFields = resolvedPrefs.dcFields.filter(f => {
+        if (!f.isCustom) return true;
+        if (!f.label || !f.label.trim()) return false;
+        if (f.id?.includes('1794281193756') || f.id?.includes('1794281232013')) return false;
+        if (f.key?.includes('1794281193756') || f.key?.includes('1794281232013')) return false;
+        return true;
+      });
+      resolvedPrefs.dcFields = resolvedPrefs.dcFields.map(f => f.isCustom ? { ...f, deletable: true } : f);
+    }
+
+    const cleanedCustomDcValues = lastInvoice ? safeParse(lastInvoice.custom_dc_values, {}) : {};
+    delete cleanedCustomDcValues['custom_dc_rto_1794281193756'];
+    delete cleanedCustomDcValues['custom_dc_rto_1794281232013'];
+    Object.keys(cleanedCustomDcValues).forEach(k => {
+      if (k.includes('1794281193756') || k.includes('1794281232013')) {
+        delete cleanedCustomDcValues[k];
+      }
+    });
 
     return res.json({
       success: true,
@@ -292,7 +312,7 @@ exports.getCustomerPreviousConfig = async (req, res) => {
       lastInvoiceId: lastInvoice ? lastInvoice.id : null,
       invoice_number: lastInvoice ? lastInvoice.invoice_number : '',
       column_preferences: resolvedPrefs,
-      custom_dc_values: lastInvoice ? safeParse(lastInvoice.custom_dc_values, {}) : {},
+      custom_dc_values: cleanedCustomDcValues,
       in_dc_no: lastInvoice ? (lastInvoice.in_dc_no || '') : '',
       out_dc_no: lastInvoice ? (lastInvoice.out_dc_no || '') : '',
       payment_mode: lastInvoice ? (lastInvoice.payment_mode || 'Bank Transfer') : 'Bank Transfer',

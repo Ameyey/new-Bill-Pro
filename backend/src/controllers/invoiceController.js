@@ -581,10 +581,20 @@ exports.generatePdf = async (req, res) => {
     const items = await db.query('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY item_no ASC, id ASC', [id]);
     const company = await db.get('SELECT * FROM company_settings WHERE user_id = ?', [req.user.id]);
 
+    const parsedItems = items.map(it => {
+      const customFields = safeParseJson(it.custom_fields, {});
+      return { ...customFields, ...it };
+    });
+    const parsedColumnPreferences = safeParseJson(invoice.column_preferences);
+    const parsedInvoice = {
+      ...invoice,
+      column_preferences: parsedColumnPreferences
+    };
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoice.invoice_number}.pdf"`);
 
-    generateInvoicePdf(invoice, company, items, res);
+    generateInvoicePdf(parsedInvoice, company, parsedItems, res);
   } catch (error) {
     console.error('PDF error:', error);
     return res.status(500).json({ success: false, message: 'PDF generation failed: ' + error.message });

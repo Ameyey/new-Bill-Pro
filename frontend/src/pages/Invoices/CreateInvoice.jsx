@@ -14,6 +14,7 @@ import {
   getInvoiceEffectivePreferences,
   getCompanyColumnPreferences,
   saveCompanyColumnPreferences,
+  normalizeItemColumns,
   DEFAULT_ITEM_COLUMNS,
   DEFAULT_DC_FIELDS
 } from '../../utils/columnPreferences';
@@ -128,12 +129,14 @@ export default function CreateInvoice() {
     const stored = getStoredPreferences();
     return {
       ...stored,
+      itemColumns: normalizeItemColumns(stored.itemColumns),
       dcFields: (stored.dcFields || DEFAULT_DC_FIELDS).map(f => ({ ...f, visible: true }))
     };
   });
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [columnModalTab, setColumnModalTab] = useState('items'); // 'items' or 'dc'
   const [customDcValues, setCustomDcValues] = useState({});
+  const [previousBillItems, setPreviousBillItems] = useState([]);
   const [draftRestored, setDraftRestored] = useState(false);
   const [activeLogoUrl, setActiveLogoUrl] = useState(company?.logo_url || '');
 
@@ -151,13 +154,45 @@ export default function CreateInvoice() {
   }, [company?.logo_url]);
 
   const handleSaveColumnPreferences = (updated) => {
+    const normalized = {
+      ...updated,
+      itemColumns: normalizeItemColumns(updated.itemColumns)
+    };
+    setColumnPreferences(normalized);
+    saveStoredPreferences(normalized);
+    if (selectedCustomerId) {
+      saveCompanyColumnPreferences(selectedCustomerId, normalized);
+      api.put(`/customers/${selectedCustomerId}/column-preferences`, { column_preferences: normalized }).catch(() => {});
+    }
+    success('Column preferences saved successfully!');
+  };
+
+  const handleRemoveCustomDcField = (fieldId, fieldKey) => {
+    const keyToMatch = fieldKey || fieldId;
+    const updatedDc = (columnPreferences.dcFields || []).filter(
+      f => f.id !== fieldId && f.id !== keyToMatch && f.key !== keyToMatch && f.key !== fieldId
+    );
+    const updated = {
+      ...columnPreferences,
+      dcFields: updatedDc
+    };
     setColumnPreferences(updated);
     saveStoredPreferences(updated);
+
+    setCustomDcValues(prev => {
+      const next = { ...prev };
+      delete next[keyToMatch];
+      delete next[fieldId];
+      if (fieldKey) delete next[fieldKey];
+      return next;
+    });
+
     if (selectedCustomerId) {
       saveCompanyColumnPreferences(selectedCustomerId, updated);
       api.put(`/customers/${selectedCustomerId}/column-preferences`, { column_preferences: updated }).catch(() => {});
     }
-    success('Column preferences saved successfully!');
+
+    success('Custom column removed.');
   };
 
   useEffect(() => {
@@ -355,8 +390,34 @@ export default function CreateInvoice() {
 
     // Instantly apply company-specific column preferences and DC fields
     if (!isEditMode && custId) {
+      const cleanDcPrefs = (prefs) => {
+        if (!prefs) return prefs;
+        const copy = { ...prefs };
+        if (Array.isArray(copy.dcFields)) {
+          copy.dcFields = copy.dcFields.filter(f => {
+            if (!f.isCustom) return true;
+            if (!f.label || !f.label.trim()) return false;
+            if (f.id?.includes('1794281193756') || f.id?.includes('1794281232013')) return false;
+            if (f.key?.includes('1794281193756') || f.key?.includes('1794281232013')) return false;
+            return true;
+          }).map(f => f.isCustom ? { ...f, deletable: true } : f);
+        }
+        return copy;
+      };
+
+      const cleanCustomValues = (vals) => {
+        if (!vals) return {};
+        const copy = { ...vals };
+        Object.keys(copy).forEach(k => {
+          if (k.includes('1794281193756') || k.includes('1794281232013')) {
+            delete copy[k];
+          }
+        });
+        return copy;
+      };
+
       // 1. Instant local switch: check company-specific memory or customer profile
-      const localCompanyPrefs = getCompanyColumnPreferences(custId) || cust?.column_preferences;
+      const localCompanyPrefs = cleanDcPrefs(getCompanyColumnPreferences(custId) || cust?.column_preferences);
       if (localCompanyPrefs) {
         setColumnPreferences(getInvoiceEffectivePreferences({ column_preferences: localCompanyPrefs }));
       } else {
@@ -366,7 +427,7 @@ export default function CreateInvoice() {
           return {
             ...base,
             dcFields: DEFAULT_DC_FIELDS.map(f => ({ ...f, visible: true })),
-            itemColumns: (base.itemColumns || DEFAULT_ITEM_COLUMNS).map(c => ({
+            itemColumns: normalizeItemColumns(base.itemColumns || DEFAULT_ITEM_COLUMNS).map(c => ({
               ...c,
               visible: c.id === 'discount' || c.id === 'gst_rate' ? Boolean(c.visible) : true
             }))
@@ -379,32 +440,29 @@ export default function CreateInvoice() {
         const res = await api.get(`/customers/${custId}/previous-config`);
         if (res.success) {
           if (res.column_preferences) {
+            const cleanedPrefs = cleanDcPrefs(res.column_preferences);
             const effective = getInvoiceEffectivePreferences({
               ...res,
               in_dc_no: res.in_dc_no,
               out_dc_no: res.out_dc_no,
               items: res.items,
-              custom_dc_values: res.custom_dc_values,
-              column_preferences: res.column_preferences
+              custom_dc_values: cleanCustomValues(res.custom_dc_values),
+              column_preferences: cleanedPrefs
             });
             setColumnPreferences(effective);
             saveCompanyColumnPreferences(custId, effective);
           }
 
-          // Populate previous DC details & notes/terms if not already typed
-          if (res.custom_dc_values && Object.keys(res.custom_dc_values).length > 0) {
-            setCustomDcValues(res.custom_dc_values);
-          }
-          if (res.in_dc_no && !inDcNo) setInDcNo(res.in_dc_no);
-          if (res.out_dc_no && !outDcNo) setOutDcNo(res.out_dc_no);
-          if (res.payment_mode) setPaymentMode(res.payment_mode);
+          // Apply standard customer terms and payment mode if not already filled
+          if (res.payment_mode && !paymentMode) setPaymentMode(res.payment_mode);
           if (res.notes && !notes) setNotes(res.notes);
           if (res.terms && !terms) setTerms(res.terms);
 
-          // Auto-populate prior bill items if current table is empty/untouched
-          const isSingleEmptyRow = items.length === 1 && !items[0].description && (!items[0].rate || items[0].rate === '0');
-          if (isSingleEmptyRow && res.items && res.items.length > 0) {
-            setItems(res.items);
+          // Save previous bill items for optional repeat, but NEVER overwrite the new bill table with old items!
+          if (res.items && Array.isArray(res.items) && res.items.length > 0) {
+            setPreviousBillItems(res.items);
+          } else {
+            setPreviousBillItems([]);
           }
         }
       } catch (err) {
@@ -496,22 +554,20 @@ export default function CreateInvoice() {
     setOutDcDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setCustomDcValues({});
+    setPreviousBillItems([]);
     setItems([
       {
         product_id: '',
         description: '',
         sq_ft: '',
-        quantity: '0',
+        quantity: '1',
         unit: 'Nos',
         rate: '0',
         discount: '0',
-        gst_rate: 0
+        gst_rate: 18
       }
     ]);
-    if (customers.length > 0) {
-      handleCustomerSelect(customers[0].id, customers);
-    }
-    success('Invoice draft cleared. Starting fresh.');
+    success('Invoice cleared. Ready for new bill items.');
   };
 
   // Quick Add/Edit Customer Handlers
@@ -809,7 +865,10 @@ export default function CreateInvoice() {
       notes: notes,
       terms: terms,
       company: company,
-      column_preferences: columnPreferences,
+      column_preferences: {
+        ...columnPreferences,
+        itemColumns: normalizeItemColumns(columnPreferences.itemColumns)
+      },
       custom_dc_values: customDcValues,
       bill_gst_rate: applyGstOnTotal ? billGstRate : null,
       apply_gst_on_total: applyGstOnTotal,
@@ -862,7 +921,10 @@ export default function CreateInvoice() {
         payment_mode: paymentMode,
         notes: notes,
         terms: terms,
-        column_preferences: columnPreferences,
+        column_preferences: {
+          ...columnPreferences,
+          itemColumns: normalizeItemColumns(columnPreferences.itemColumns)
+        },
         custom_dc_values: customDcValues,
         image1_url: activeLogoUrl || company?.logo_url || previewData?.image1_url || ''
       };
@@ -911,6 +973,18 @@ export default function CreateInvoice() {
         </div>
 
         <div className="flex items-center gap-3">
+          {!isEditMode && (
+            <button
+              type="button"
+              onClick={handleClearDraft}
+              className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-xs flex items-center gap-1.5 transition"
+              title="Clear all fields and start a fresh blank bill"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Reset / Clean Form</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleOpenPreview}
@@ -1248,16 +1322,27 @@ export default function CreateInvoice() {
 
               // Custom added DC fields (e.g. Vehicle No, PO Date, E-Way Bill)
               return (
-                <div key={field.id}>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-purple-700 mb-1 truncate" title={field.label}>
-                    {field.label}
-                  </label>
+                <div key={field.id} className="relative group">
+                  <div className="flex items-center justify-between mb-1 gap-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-purple-700 truncate" title={field.label}>
+                      {field.label}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCustomDcField(field.id, field.key)}
+                      title={`Remove ${field.label} column`}
+                      className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-1.5 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 border border-rose-200 shadow-xs"
+                    >
+                      <Trash2 className="w-3 h-3 text-rose-500" />
+                      <span>Remove</span>
+                    </button>
+                  </div>
                   <input
                     type={field.type || 'text'}
-                    value={customDcValues[field.key] || ''}
-                    onChange={(e) => setCustomDcValues({ ...customDcValues, [field.key]: e.target.value })}
+                    value={customDcValues[field.key] ?? customDcValues[field.id] ?? ''}
+                    onChange={(e) => setCustomDcValues({ ...customDcValues, [field.key || field.id]: e.target.value })}
                     placeholder={field.placeholder || `Enter ${field.label}...`}
-                    className="w-full px-3 py-2 border border-purple-200 bg-purple-50/30 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    className="w-full px-3 py-2 border border-purple-200 bg-purple-50/30 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono"
                   />
                 </div>
               );
@@ -1285,6 +1370,20 @@ export default function CreateInvoice() {
                 <SlidersHorizontal className="w-3.5 h-3.5 text-brand-600" />
                 <span>⚙️ Customize Columns</span>
               </button>
+              {previousBillItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItems(previousBillItems);
+                    success(`Copied ${previousBillItems.length} item(s) from previous bill`);
+                  }}
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs"
+                  title="Optionally copy items from this customer's previous bill"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Repeat Last Bill Items</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleAddItem}
@@ -1521,8 +1620,8 @@ export default function CreateInvoice() {
                           <td key={col.id} className="py-2.5 px-2">
                             <input
                               type={col.type || 'text'}
-                              value={item[col.key] || ''}
-                              onChange={(e) => handleItemChange(idx, col.key, e.target.value)}
+                              value={item[col.key] ?? item[col.id] ?? ''}
+                              onChange={(e) => handleItemChange(idx, col.key || col.id, e.target.value)}
                               placeholder={col.label}
                               className="w-full px-2 py-1.5 border border-purple-200 bg-purple-50/20 rounded-lg text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none text-center"
                             />
