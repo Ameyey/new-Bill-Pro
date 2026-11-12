@@ -416,7 +416,7 @@ export default function CustomerList() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. V.P Engineering"
+                placeholder="e.g. A.B.C Engineering"
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -442,7 +442,7 @@ export default function CustomerList() {
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="e.g. 9822001122"
+                placeholder="e.g. 123456789"
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -468,7 +468,7 @@ export default function CustomerList() {
                 rows={2}
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="e.g. Nanded Phata Near Savali Dhaba, Sinhgad Road"
+                placeholder="e.g. address ........"
                 className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none"
               />
             </div>
@@ -533,7 +533,7 @@ export default function CustomerList() {
                     type="text"
                     value={gst.gst_number}
                     onChange={(e) => handleGstChange(idx, 'gst_number', e.target.value.toUpperCase())}
-                    placeholder="e.g. 27ABCDE1234F1Z5"
+                    placeholder="e.g. 27ABCDE1234F1235"
                     className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-semibold uppercase bg-white focus:outline-none"
                   />
                   <input
