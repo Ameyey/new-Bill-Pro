@@ -1434,8 +1434,8 @@ export default function CreateInvoice() {
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
+          <div className="overflow-x-auto pb-2">
+            <table className="w-full text-xs border-collapse min-w-[720px]">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 text-left">
                   {columnPreferences.itemColumns.filter(c => c.visible).map((col) => (
@@ -1467,7 +1467,7 @@ export default function CreateInvoice() {
                       {visibleColumns.map((col) => {
                         if (col.id === 'item_no') {
                           return (
-                            <td key={col.id} className="py-2.5 px-2 text-center font-mono text-slate-400">
+                            <td key={col.id} className="py-2.5 px-2 text-center font-mono text-slate-400 font-bold">
                               {idx + 1}
                             </td>
                           );
@@ -1478,7 +1478,7 @@ export default function CreateInvoice() {
                               <select
                                 value={item.product_id || ''}
                                 onChange={(e) => handleItemChange(idx, 'product_id', e.target.value)}
-                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none"
+                                className="w-full min-w-[140px] h-9 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                               >
                                 <option value="">-- Quick Select --</option>
                                 {products.map(p => (
@@ -1497,7 +1497,7 @@ export default function CreateInvoice() {
                                 value={item.description}
                                 onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
                                 placeholder="Item Description"
-                                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-brand-500 focus:outline-none font-medium"
+                                className="w-full min-w-[180px] h-9 px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none font-medium"
                               />
                             </td>
                           );
@@ -1512,7 +1512,7 @@ export default function CreateInvoice() {
                                 onFocus={(e) => { if (e.target.value === '0') e.target.select(); }}
                                 onChange={(e) => handleItemChange(idx, 'sq_ft', e.target.value)}
                                 placeholder="0"
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-center focus:outline-none"
+                                className="w-full min-w-[75px] h-9 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-center focus:ring-2 focus:ring-brand-500 focus:outline-none"
                               />
                             </td>
                           );
@@ -1528,7 +1528,7 @@ export default function CreateInvoice() {
                                 onFocus={(e) => { if (e.target.value === '0') e.target.select(); }}
                                 onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                                 placeholder="1"
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-center focus:outline-none"
+                                className="w-full min-w-[75px] h-9 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-center font-bold focus:ring-2 focus:ring-brand-500 focus:outline-none"
                               />
                             </td>
                           );
@@ -1539,7 +1539,7 @@ export default function CreateInvoice() {
                               <select
                                 value={item.unit}
                                 onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                                className="w-full px-1.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-center"
+                                className="w-full min-w-[70px] h-9 px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-center font-medium focus:outline-none focus:ring-1 focus:ring-brand-500"
                               >
                                 <option value="Nos">Nos</option>
                                 <option value="Sq.Ft">Sq.Ft</option>
@@ -1561,7 +1561,7 @@ export default function CreateInvoice() {
                                 onFocus={(e) => { if (e.target.value === '0') e.target.select(); }}
                                 onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
                                 placeholder="0.00"
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-right focus:outline-none font-bold"
+                                className="w-full min-w-[90px] h-9 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-right focus:ring-2 focus:ring-brand-500 focus:outline-none font-bold"
                               />
                             </td>
                           );
@@ -1576,7 +1576,7 @@ export default function CreateInvoice() {
                                 onFocus={(e) => { if (e.target.value === '0') e.target.select(); }}
                                 onChange={(e) => handleItemChange(idx, 'discount', e.target.value)}
                                 placeholder="0"
-                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono text-right focus:outline-none"
+                                className="w-full min-w-[75px] h-9 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono text-right focus:outline-none"
                               />
                             </td>
                           );
@@ -1586,7 +1586,7 @@ export default function CreateInvoice() {
                             <td key={col.id} className="py-2.5 px-2 text-center">
                               {applyGstOnTotal ? (
                                 <span
-                                  className="inline-block px-2 py-1 rounded-md bg-brand-50 text-brand-700 font-mono font-bold text-[11px] border border-brand-200"
+                                  className="inline-flex items-center justify-center min-w-[65px] h-9 px-2.5 py-1.5 rounded-lg bg-brand-50 text-brand-700 font-mono font-bold text-xs border border-brand-200"
                                   title="GST applied on the total bill"
                                 >
                                   {billGstRate}%
@@ -1595,7 +1595,7 @@ export default function CreateInvoice() {
                                 <select
                                   value={item.gst_rate}
                                   onChange={(e) => handleItemChange(idx, 'gst_rate', parseFloat(e.target.value))}
-                                  className="w-full px-1.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-center bg-white"
+                                  className="w-full min-w-[75px] h-9 px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-center bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                                 >
                                   <option value={0}>0%</option>
                                   <option value={5}>5%</option>
@@ -1609,8 +1609,10 @@ export default function CreateInvoice() {
                         }
                         if (col.id === 'total') {
                           return (
-                            <td key={col.id} className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">
-                              {formatNumber(rowTotal)}
+                            <td key={col.id} className="py-2.5 px-2 text-right">
+                              <div className="min-w-[85px] h-9 flex items-center justify-end font-mono font-bold text-slate-900 text-xs px-1">
+                                {formatNumber(rowTotal)}
+                              </div>
                             </td>
                           );
                         }
@@ -1623,7 +1625,7 @@ export default function CreateInvoice() {
                               value={item[col.key] ?? item[col.id] ?? ''}
                               onChange={(e) => handleItemChange(idx, col.key || col.id, e.target.value)}
                               placeholder={col.label}
-                              className="w-full px-2 py-1.5 border border-purple-200 bg-purple-50/20 rounded-lg text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none text-center"
+                              className="w-full min-w-[85px] h-9 px-2.5 py-1.5 border border-purple-200 bg-purple-50/20 rounded-lg text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none text-center"
                             />
                           </td>
                         );
