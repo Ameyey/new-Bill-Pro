@@ -122,7 +122,7 @@ exports.getMe = async (req, res) => {
     const company = await db.get('SELECT * FROM company_settings WHERE user_id = ?', [req.user.id]);
     if (company && !company.logo_url) {
       const logoImg = await db.get(
-        'SELECT file_path FROM invoice_images WHERE user_id = ? AND (image_slot = 1 OR image_type = "logo") ORDER BY id DESC LIMIT 1',
+        "SELECT file_path FROM invoice_images WHERE user_id = ? AND (image_slot = 1 OR image_type = 'logo') ORDER BY id DESC LIMIT 1",
         [req.user.id]
       );
       if (logoImg?.file_path) {

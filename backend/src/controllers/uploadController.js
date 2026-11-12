@@ -31,9 +31,11 @@ exports.uploadImage = async (req, res) => {
     const existingSlotImage = existingImages.find(img => img.image_slot === image_slot || (image_slot === 1 && !img.image_slot));
     if (existingSlotImage) {
       const cleanRel = (existingSlotImage.file_path || '').replace(/^\/+/, '');
-      const oldFilePath = path.join(__dirname, '../../', cleanRel);
-      if (fs.existsSync(oldFilePath)) {
-        try { fs.unlinkSync(oldFilePath); } catch (e) {}
+      if (!cleanRel.startsWith('data:')) {
+        const oldFilePath = path.join(__dirname, '../../', cleanRel);
+        if (fs.existsSync(oldFilePath)) {
+          try { fs.unlinkSync(oldFilePath); } catch (e) {}
+        }
       }
       await db.run('DELETE FROM invoice_images WHERE id = ?', [existingSlotImage.id]);
     } else if (existingImages.length >= 2 && !invoice_id) {
@@ -43,7 +45,33 @@ exports.uploadImage = async (req, res) => {
       });
     }
 
-    const filePath = `/uploads/${req.file.filename}`;
+    // Determine storage format: Base64 Data URI on Vercel / serverless (read-only filesystem)
+    // or local uploads disk if writable
+    let filePath;
+    if (req.file.buffer) {
+      if (process.env.VERCEL) {
+        // Vercel serverless environment: store as persistent Base64 Data URI in DB
+        const mime = req.file.mimetype || 'image/png';
+        filePath = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+      } else {
+        // Local environment: persist to uploads folder if possible
+        try {
+          const uploadDir = path.join(__dirname, '../../uploads');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const ext = path.extname(req.file.originalname) || '.png';
+          const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+          fs.writeFileSync(path.join(uploadDir, uniqueName), req.file.buffer);
+          filePath = `/uploads/${uniqueName}`;
+        } catch (diskErr) {
+          const mime = req.file.mimetype || 'image/png';
+          filePath = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+        }
+      }
+    } else {
+      filePath = `/uploads/${req.file.filename}`;
+    }
 
     // Inspect columns of invoice_images to ensure 100% schema compatibility
     const cols = await getTableColumns('invoice_images');
@@ -147,9 +175,11 @@ exports.deleteImage = async (req, res) => {
     const img = await db.get('SELECT * FROM invoice_images WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (img) {
       const cleanRel = (img.file_path || '').replace(/^\/+/, '');
-      const fullPath = path.join(__dirname, '../../', cleanRel);
-      if (fs.existsSync(fullPath)) {
-        try { fs.unlinkSync(fullPath); } catch (e) {}
+      if (!cleanRel.startsWith('data:')) {
+        const fullPath = path.join(__dirname, '../../', cleanRel);
+        if (fs.existsSync(fullPath)) {
+          try { fs.unlinkSync(fullPath); } catch (e) {}
+        }
       }
       if (img.image_type === 'logo' || img.image_slot === 1) {
         try {

@@ -48,6 +48,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'BillPro API', timestamp: new Date() });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'BillPro API is running', timestamp: new Date() });
+});
+
 // Startup sequence
 async function startServer() {
   try {
@@ -65,7 +70,12 @@ async function startServer() {
   }
 }
 
-startServer();
+// Start HTTP listener only when running locally (not inside Vercel serverless environment)
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  db.init();
+}
 
 module.exports = app;
 

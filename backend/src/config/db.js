@@ -25,6 +25,9 @@ function convertSqlForPg(sql) {
   converted = converted.replace(/DATE_FORMAT\s*\(\s*([^,]+)\s*,\s*['"]%Y-%m['"]\s*\)/gi, "TO_CHAR($1, 'YYYY-MM')");
   converted = converted.replace(/\bIFNULL\s*\(/gi, 'COALESCE(');
 
+  // Convert double-quoted string literals in comparisons (e.g. image_type = "logo") to single quotes for PostgreSQL
+  converted = converted.replace(/=\s*"([^"]+)"/g, "='$1'");
+
   return converted;
 }
 
