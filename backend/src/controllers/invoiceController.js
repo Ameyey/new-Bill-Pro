@@ -44,14 +44,15 @@ exports.getInvoices = async (req, res) => {
     const { search, customer_id, payment_status, start_date, end_date } = req.query;
 
     let sql = `
-      SELECT i.*, 
-             COALESCE(NULLIF(i.image1_url, ''), cs.logo_url, '') as image1_url,
+      SELECT i.id, i.invoice_number, i.invoice_date, i.due_date, i.in_dc_no, i.out_dc_no,
+             i.customer_id, i.customer_name, i.customer_city, i.customer_phone,
+             i.selected_gst_number, i.subtotal, i.discount_total, i.taxable_amount,
+             i.total_gst, i.grand_total, i.payment_status, i.payment_mode, i.created_at,
              c.name as customer_company_name, 
              c.phone as customer_phone_contact,
              (SELECT COUNT(*) FROM invoice_items WHERE invoice_id = i.id) as item_count
       FROM invoices i
       LEFT JOIN customers c ON i.customer_id = c.id
-      LEFT JOIN company_settings cs ON cs.user_id = i.user_id
       WHERE i.user_id = ?
     `;
     const params = [req.user.id];
@@ -86,17 +87,10 @@ exports.getInvoices = async (req, res) => {
 
     const invoices = await db.query(sql, params);
 
-    const formattedInvoices = invoices.map(inv => ({
-      ...inv,
-      column_preferences: safeParseJson(inv.column_preferences),
-      custom_dc_values: safeParseJson(inv.custom_dc_values, {}),
-      header_preferences: safeParseJson(inv.header_preferences)
-    }));
-
     return res.json({
       success: true,
-      invoices: formattedInvoices,
-      total: formattedInvoices.length
+      invoices,
+      total: invoices.length
     });
   } catch (error) {
     console.error('Get invoices error:', error);
@@ -130,6 +124,9 @@ exports.getInvoiceById = async (req, res) => {
 
     const checkFileExists = (url) => {
       if (!url) return false;
+      if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+        return true;
+      }
       try {
         const cleanPath = url.replace(/^\/+/, '');
         const absPath = path.join(__dirname, '../../', cleanPath);
@@ -224,7 +221,7 @@ exports.createInvoice = async (req, res) => {
       return res.status(400).json({ success: false, message: 'At least one product item is required in the invoice.' });
     }
 
-    const company = await db.get('SELECT * FROM company_settings WHERE user_id = ?', [req.user.id]);
+    const company = await db.get('SELECT state_code, invoice_prefix, next_invoice_no, terms_conditions, logo_url, signature_url FROM company_settings WHERE user_id = ?', [req.user.id]);
     const companyStateCode = company ? company.state_code : '27';
 
     // Calculate all totals
@@ -250,6 +247,10 @@ exports.createInvoice = async (req, res) => {
     const colPrefsStr = safeStringifyJson(column_preferences);
     const customDcStr = safeStringifyJson(custom_dc_values);
     const headerPrefsStr = safeStringifyJson(header_preferences);
+
+    // Keep invoice records light: only store image1/image2 if it is a custom override differing from company settings
+    const finalImage1 = (image1_url && image1_url !== company?.logo_url) ? image1_url : '';
+    const finalImage2 = (image2_url && image2_url !== company?.signature_url) ? image2_url : '';
 
     const result = await db.run(
       `INSERT INTO invoices (
@@ -294,8 +295,8 @@ exports.createInvoice = async (req, res) => {
         payment_mode || 'Bank Transfer',
         notes || '',
         terms || (company ? company.terms_conditions : ''),
-        image1_url || company?.logo_url || '',
-        image2_url || company?.signature_url || '',
+        finalImage1,
+        finalImage2,
         colPrefsStr,
         customDcStr,
         headerPrefsStr,
@@ -306,39 +307,43 @@ exports.createInvoice = async (req, res) => {
 
     const invoiceId = result.lastInsertRowid;
 
-    // Insert invoice items
-    for (let idx = 0; idx < calc.items.length; idx++) {
-      const item = calc.items[idx];
-      // Capture any custom column values in custom_fields
-      const standardKeys = ['product_id', 'item_no', 'description', 'sq_ft', 'quantity', 'unit', 'rate', 'discount', 'taxable_value', 'gst_rate', 'gst_amount', 'total_amount'];
-      const extra = {};
-      Object.keys(item).forEach(k => {
-        if (!standardKeys.includes(k) && item[k] !== undefined) {
-          extra[k] = item[k];
-        }
-      });
-
-      await db.run(
+    // Batch insert invoice items in a single fast query
+    if (calc.items && calc.items.length > 0) {
+      const placeholders = [];
+      const itemParams = [];
+      for (let idx = 0; idx < calc.items.length; idx++) {
+        const item = calc.items[idx];
+        const standardKeys = ['product_id', 'item_no', 'description', 'sq_ft', 'quantity', 'unit', 'rate', 'discount', 'taxable_value', 'gst_rate', 'gst_amount', 'total_amount'];
+        const extra = {};
+        Object.keys(item).forEach(k => {
+          if (!standardKeys.includes(k) && item[k] !== undefined) {
+            extra[k] = item[k];
+          }
+        });
+        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        itemParams.push(
+          invoiceId,
+          item.product_id || null,
+          idx + 1,
+          item.description || '',
+          item.sq_ft || 0,
+          item.quantity || 1,
+          item.unit || 'Nos',
+          item.rate || 0,
+          item.discount || 0,
+          item.taxable_value || 0,
+          item.gst_rate || 0,
+          item.gst_amount || 0,
+          item.total_amount || 0,
+          Object.keys(extra).length > 0 ? JSON.stringify(extra) : null
+        );
+      }
+      await db.query(
         `INSERT INTO invoice_items (
           invoice_id, product_id, item_no, description, sq_ft, quantity, unit,
           rate, discount, taxable_value, gst_rate, gst_amount, total_amount, custom_fields
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          invoiceId,
-          item.product_id,
-          idx + 1,
-          item.description,
-          item.sq_ft,
-          item.quantity,
-          item.unit,
-          item.rate,
-          item.discount,
-          item.taxable_value,
-          item.gst_rate,
-          item.gst_amount,
-          item.total_amount,
-          Object.keys(extra).length > 0 ? JSON.stringify(extra) : null
-        ]
+        ) VALUES ${placeholders.join(', ')}`,
+        itemParams
       );
     }
 
@@ -355,6 +360,8 @@ exports.createInvoice = async (req, res) => {
       message: 'Invoice generated successfully!',
       invoice: {
         ...createdInvoice,
+        image1_url: createdInvoice.image1_url || company?.logo_url || '',
+        image2_url: createdInvoice.image2_url || company?.signature_url || '',
         items: createdItems
       }
     });
@@ -406,7 +413,7 @@ exports.updateInvoice = async (req, res) => {
       header_preferences
     } = req.body;
 
-    const company = await db.get('SELECT * FROM company_settings WHERE user_id = ?', [req.user.id]);
+    const company = await db.get('SELECT state_code, invoice_prefix, next_invoice_no, terms_conditions, logo_url, signature_url FROM company_settings WHERE user_id = ?', [req.user.id]);
     const companyStateCode = company ? company.state_code : '27';
 
     // Calculate totals
@@ -422,6 +429,13 @@ exports.updateInvoice = async (req, res) => {
     const colPrefsStr = column_preferences !== undefined ? safeStringifyJson(column_preferences) : safeStringifyJson(existing.column_preferences);
     const customDcStr = custom_dc_values !== undefined ? safeStringifyJson(custom_dc_values) : safeStringifyJson(existing.custom_dc_values);
     const headerPrefsStr = header_preferences !== undefined ? safeStringifyJson(header_preferences) : safeStringifyJson(existing.header_preferences);
+
+    const finalImage1 = image1_url !== undefined
+      ? ((image1_url && image1_url !== company?.logo_url) ? image1_url : '')
+      : existing.image1_url;
+    const finalImage2 = image2_url !== undefined
+      ? ((image2_url && image2_url !== company?.signature_url) ? image2_url : '')
+      : existing.image2_url;
 
     await db.run(
       `UPDATE invoices SET
@@ -465,8 +479,8 @@ exports.updateInvoice = async (req, res) => {
         payment_mode || existing.payment_mode,
         notes || '',
         terms || existing.terms,
-        image1_url !== undefined ? image1_url : existing.image1_url,
-        image2_url !== undefined ? image2_url : existing.image2_url,
+        finalImage1,
+        finalImage2,
         colPrefsStr,
         customDcStr,
         headerPrefsStr,
@@ -477,39 +491,44 @@ exports.updateInvoice = async (req, res) => {
       ]
     );
 
-    // Delete old items and insert updated items
+    // Delete old items and batch insert updated items in a single query
     await db.run('DELETE FROM invoice_items WHERE invoice_id = ?', [id]);
-    for (let idx = 0; idx < calc.items.length; idx++) {
-      const item = calc.items[idx];
-      const standardKeys = ['product_id', 'item_no', 'description', 'sq_ft', 'quantity', 'unit', 'rate', 'discount', 'taxable_value', 'gst_rate', 'gst_amount', 'total_amount'];
-      const extra = {};
-      Object.keys(item).forEach(k => {
-        if (!standardKeys.includes(k) && item[k] !== undefined) {
-          extra[k] = item[k];
-        }
-      });
-
-      await db.run(
+    if (calc.items && calc.items.length > 0) {
+      const placeholders = [];
+      const itemParams = [];
+      for (let idx = 0; idx < calc.items.length; idx++) {
+        const item = calc.items[idx];
+        const standardKeys = ['product_id', 'item_no', 'description', 'sq_ft', 'quantity', 'unit', 'rate', 'discount', 'taxable_value', 'gst_rate', 'gst_amount', 'total_amount'];
+        const extra = {};
+        Object.keys(item).forEach(k => {
+          if (!standardKeys.includes(k) && item[k] !== undefined) {
+            extra[k] = item[k];
+          }
+        });
+        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        itemParams.push(
+          id,
+          item.product_id || null,
+          idx + 1,
+          item.description || '',
+          item.sq_ft || 0,
+          item.quantity || 1,
+          item.unit || 'Nos',
+          item.rate || 0,
+          item.discount || 0,
+          item.taxable_value || 0,
+          item.gst_rate || 0,
+          item.gst_amount || 0,
+          item.total_amount || 0,
+          Object.keys(extra).length > 0 ? JSON.stringify(extra) : null
+        );
+      }
+      await db.query(
         `INSERT INTO invoice_items (
           invoice_id, product_id, item_no, description, sq_ft, quantity, unit,
           rate, discount, taxable_value, gst_rate, gst_amount, total_amount, custom_fields
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          item.product_id,
-          idx + 1,
-          item.description,
-          item.sq_ft,
-          item.quantity,
-          item.unit,
-          item.rate,
-          item.discount,
-          item.taxable_value,
-          item.gst_rate,
-          item.gst_amount,
-          item.total_amount,
-          Object.keys(extra).length > 0 ? JSON.stringify(extra) : null
-        ]
+        ) VALUES ${placeholders.join(', ')}`,
+        itemParams
       );
     }
 
@@ -521,6 +540,8 @@ exports.updateInvoice = async (req, res) => {
       message: 'Invoice updated successfully!',
       invoice: {
         ...updated,
+        image1_url: updated.image1_url || company?.logo_url || '',
+        image2_url: updated.image2_url || company?.signature_url || '',
         items: updatedItems
       }
     });

@@ -117,18 +117,22 @@ exports.uploadImage = async (req, res) => {
     const sql = `INSERT INTO invoice_images (${insertFields.join(', ')}) VALUES (${placeholders})`;
     const result = await db.run(sql, insertValues);
 
-    // If official company logo (slot 1 or type logo), sync to company_settings & existing invoices
+    // If official company logo (slot 1 or type logo), sync to company_settings (and specific invoice if invoice_id was provided)
     if (image_type === 'logo' || image_slot === 1) {
       try {
         await db.run('UPDATE company_settings SET logo_url = ? WHERE user_id = ?', [filePath, req.user.id]);
-        await db.run('UPDATE invoices SET image1_url = ? WHERE user_id = ?', [filePath, req.user.id]);
+        if (invoice_id) {
+          await db.run('UPDATE invoices SET image1_url = ? WHERE id = ? AND user_id = ?', [filePath, invoice_id, req.user.id]);
+        }
       } catch (settingsErr) {
         console.warn('Could not update logo_url in company_settings:', settingsErr.message);
       }
     } else if (image_type === 'signature' || image_slot === 2) {
       try {
         await db.run('UPDATE company_settings SET signature_url = ? WHERE user_id = ?', [filePath, req.user.id]);
-        await db.run('UPDATE invoices SET image2_url = ? WHERE user_id = ?', [filePath, req.user.id]);
+        if (invoice_id) {
+          await db.run('UPDATE invoices SET image2_url = ? WHERE id = ? AND user_id = ?', [filePath, invoice_id, req.user.id]);
+        }
       } catch (settingsErr) {
         console.warn('Could not update signature_url in company_settings:', settingsErr.message);
       }
