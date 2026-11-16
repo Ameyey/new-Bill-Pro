@@ -31,6 +31,47 @@ export default function ImageUploader({ invoiceId = null, onImagesChange, initia
     }
   };
 
+  const compressImage = (file, maxWidth = 600, quality = 0.85) => {
+    return new Promise((resolve) => {
+      if (file.type === 'image/svg+xml') {
+        return resolve(file);
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth || height > maxWidth) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxWidth) / height);
+              height = maxWidth;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (blob && blob.size < file.size) {
+              resolve(new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' }));
+            } else {
+              resolve(file);
+            }
+          }, 'image/jpeg', quality);
+        };
+        img.onerror = () => resolve(file);
+        img.src = event.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -42,24 +83,27 @@ export default function ImageUploader({ invoiceId = null, onImagesChange, initia
       return;
     }
 
-    // Client-side file size validation (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      error('File size exceeds 5MB limit.');
+    // Client-side file size validation (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      error('File size exceeds 10MB limit.');
       return;
-    }
-
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('slot', '1');
-    formData.append('type', 'logo');
-    if (invoiceId) {
-      formData.append('invoice_id', invoiceId);
     }
 
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
+      // Auto-compress image to ensure lightning-fast upload & minimal database payload
+      const uploadFile = await compressImage(file);
+
+      const formData = new FormData();
+      formData.append('image', uploadFile);
+      formData.append('slot', '1');
+      formData.append('type', 'logo');
+      if (invoiceId) {
+        formData.append('invoice_id', invoiceId);
+      }
+
       const res = await api.uploadImage(formData, (percent) => {
         setUploadProgress(percent);
       });

@@ -895,6 +895,21 @@ export default function CreateInvoice() {
 
     setSaving(true);
     try {
+      // Sanitize headerPreferences so large Base64 strings are not duplicated in the JSON payload
+      const sanitizedHeaderPrefs = { ...(columnPreferences?.headerPreferences || {}) };
+      if (sanitizedHeaderPrefs.logoUrl && sanitizedHeaderPrefs.logoUrl.startsWith('data:')) {
+        delete sanitizedHeaderPrefs.logoUrl;
+      }
+
+      const cleanColPrefs = {
+        ...columnPreferences,
+        headerPreferences: sanitizedHeaderPrefs,
+        itemColumns: normalizeItemColumns(columnPreferences?.itemColumns || [])
+      };
+
+      // Only send custom logo if it differs from the company logo stored in database
+      const customLogo = (activeLogoUrl && activeLogoUrl !== company?.logo_url) ? activeLogoUrl : '';
+
       const payload = {
         customer_id: selectedCustomerId,
         customer_gst_id: selectedGstId || null,
@@ -921,12 +936,9 @@ export default function CreateInvoice() {
         payment_mode: paymentMode,
         notes: notes,
         terms: terms,
-        column_preferences: {
-          ...columnPreferences,
-          itemColumns: normalizeItemColumns(columnPreferences.itemColumns)
-        },
+        column_preferences: cleanColPrefs,
         custom_dc_values: customDcValues,
-        image1_url: activeLogoUrl || company?.logo_url || previewData?.image1_url || ''
+        image1_url: customLogo
       };
 
       let res;
