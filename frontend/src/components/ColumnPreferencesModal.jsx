@@ -177,42 +177,42 @@ export default function ColumnPreferencesModal({
           <button
             type="button"
             onClick={() => setActiveTab('items')}
-            className={`pb-3 px-4 flex items-center gap-2 border-b-2 transition ${
+            className={`pb-3 px-2 sm:px-4 flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 border-b-2 transition ${
               activeTab === 'items'
                 ? 'border-brand-600 text-brand-600'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Package className="w-4 h-4" />
-            <span>Product Item Columns ({itemColumns.filter(c => c.visible).length} Active)</span>
+            <Package className="w-4 h-4 shrink-0" />
+            <span className="truncate">Product Columns ({itemColumns.filter(c => c.visible).length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('dc')}
-            className={`pb-3 px-4 flex items-center gap-2 border-b-2 transition ${
+            className={`pb-3 px-2 sm:px-4 flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 border-b-2 transition ${
               activeTab === 'dc'
                 ? 'border-brand-600 text-brand-600'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Calendar className="w-4 h-4" />
-            <span>Invoice & DC Metadata Fields ({dcFields.filter(f => f.visible).length} Active)</span>
+            <Calendar className="w-4 h-4 shrink-0" />
+            <span className="truncate">Invoice & DC Fields ({dcFields.filter(f => f.visible).length})</span>
           </button>
         </div>
 
         {/* TAB 1: Item Table Columns */}
         {activeTab === 'items' && (
           <div className="space-y-4">
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-xs text-left border-collapse">
-                <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase tracking-wider">
+            <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
+              <table className="w-full min-w-[480px] sm:min-w-[540px] text-xs text-left border-collapse">
+                <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase tracking-wider text-[11px]">
                   <tr>
                     <th className="py-2.5 px-3 w-12 text-center">Show</th>
-                    <th className="py-2.5 px-3">Column Name (Edit to Rename)</th>
-                    <th className="py-2.5 px-3 w-32">Original Label</th>
-                    <th className="py-2.5 px-3 w-24 text-center">Type</th>
-                    <th className="py-2.5 px-3 w-16 text-center">Delete</th>
+                    <th className="py-2.5 px-3 min-w-[160px]">Column Name (Edit to Rename)</th>
+                    <th className="py-2.5 px-3 w-28 hidden sm:table-cell">Original Label</th>
+                    <th className="py-2.5 px-3 w-16 sm:w-20 text-center">Type</th>
+                    <th className="py-2.5 px-3 w-14 sm:w-16 text-center">Delete</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -240,26 +240,30 @@ export default function ColumnPreferencesModal({
 
                       {/* Editable Column Name */}
                       <td className="py-2 px-3">
-                        <div className="relative flex items-center">
+                        <div className="space-y-0.5">
                           <input
                             type="text"
                             value={col.label}
                             onChange={(e) => handleItemLabelChange(col.id, e.target.value)}
                             placeholder={col.defaultLabel}
-                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                            className="w-full min-w-[130px] px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none bg-white"
                           />
+                          <div className="sm:hidden text-[10px] text-slate-400 font-mono">
+                            Default: {col.defaultLabel}
+                            {col.isCustom && <span className="ml-1 text-[9px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded font-sans font-bold">Custom</span>}
+                          </div>
                         </div>
                       </td>
 
                       {/* Default Original Name */}
-                      <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">
+                      <td className="py-2 px-3 text-slate-400 font-mono text-[11px] hidden sm:table-cell">
                         {col.defaultLabel}
                         {col.isCustom && <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-sans font-bold">Custom</span>}
                       </td>
 
                       {/* Type */}
                       <td className="py-2 px-3 text-center">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-mono rounded text-[10px]">
+                        <span className="px-1.5 sm:px-2 py-0.5 bg-slate-100 text-slate-600 font-mono rounded text-[10px]">
                           {col.isNumeric ? 'Number' : 'Text'}
                         </span>
                       </td>
@@ -276,7 +280,7 @@ export default function ColumnPreferencesModal({
                             <Trash2 className="w-4 h-4" />
                           </button>
                         ) : (
-                          <span className="text-slate-300 text-[10px] font-semibold italic">Required</span>
+                          <span className="text-slate-400 text-[10px] font-semibold bg-slate-100 px-1.5 py-0.5 rounded">Fixed</span>
                         )}
                       </td>
                     </tr>
@@ -371,15 +375,15 @@ export default function ColumnPreferencesModal({
         {/* TAB 2: Invoice & DC Metadata Fields */}
         {activeTab === 'dc' && (
           <div className="space-y-4">
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-xs text-left border-collapse">
-                <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase tracking-wider">
+            <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
+              <table className="w-full min-w-[480px] sm:min-w-[540px] text-xs text-left border-collapse">
+                <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase tracking-wider text-[11px]">
                   <tr>
                     <th className="py-2.5 px-3 w-12 text-center">Show</th>
-                    <th className="py-2.5 px-3">Field Label (Edit to Rename)</th>
-                    <th className="py-2.5 px-3 w-32">Original Field</th>
-                    <th className="py-2.5 px-3 w-24 text-center">Type</th>
-                    <th className="py-2.5 px-3 w-16 text-center">Delete</th>
+                    <th className="py-2.5 px-3 min-w-[160px]">Field Label (Edit to Rename)</th>
+                    <th className="py-2.5 px-3 w-28 hidden sm:table-cell">Original Field</th>
+                    <th className="py-2.5 px-3 w-16 sm:w-20 text-center">Type</th>
+                    <th className="py-2.5 px-3 w-14 sm:w-16 text-center">Delete</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -407,24 +411,30 @@ export default function ColumnPreferencesModal({
 
                       {/* Editable Field Label */}
                       <td className="py-2 px-3">
-                        <input
-                          type="text"
-                          value={field.label}
-                          onChange={(e) => handleDcLabelChange(field.id, e.target.value)}
-                          placeholder={field.defaultLabel}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"
-                        />
+                        <div className="space-y-0.5">
+                          <input
+                            type="text"
+                            value={field.label}
+                            onChange={(e) => handleDcLabelChange(field.id, e.target.value)}
+                            placeholder={field.defaultLabel}
+                            className="w-full min-w-[130px] px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none bg-white"
+                          />
+                          <div className="sm:hidden text-[10px] text-slate-400 font-mono">
+                            Default: {field.defaultLabel}
+                            {field.isCustom && <span className="ml-1 text-[9px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded font-sans font-bold">Custom</span>}
+                          </div>
+                        </div>
                       </td>
 
                       {/* Default Original Field */}
-                      <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">
+                      <td className="py-2 px-3 text-slate-400 font-mono text-[11px] hidden sm:table-cell">
                         {field.defaultLabel}
                         {field.isCustom && <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-sans font-bold">Custom</span>}
                       </td>
 
                       {/* Type */}
                       <td className="py-2 px-3 text-center">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-mono rounded text-[10px] capitalize">
+                        <span className="px-1.5 sm:px-2 py-0.5 bg-slate-100 text-slate-600 font-mono rounded text-[10px] capitalize">
                           {field.type || 'text'}
                         </span>
                       </td>
@@ -441,7 +451,7 @@ export default function ColumnPreferencesModal({
                             <Trash2 className="w-4 h-4" />
                           </button>
                         ) : (
-                          <span className="text-slate-300 text-[10px] font-semibold italic">Required</span>
+                          <span className="text-slate-400 text-[10px] font-semibold bg-slate-100 px-1.5 py-0.5 rounded">Fixed</span>
                         )}
                       </td>
                     </tr>
