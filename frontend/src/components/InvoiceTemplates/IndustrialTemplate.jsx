@@ -602,70 +602,70 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
           </thead>
           <tbody>
             {rows.map((item, idx) => (
-              <tr key={idx} className="border-b border-slate-200 text-center h-[21px]">
+              <tr key={idx} className="border-b border-slate-200 text-center min-h-[22px]">
                 {visibleCols.map((col, cIdx) => {
                   const isLast = cIdx === visibleCols.length - 1;
                   const borderClass = isLast ? '' : 'border-r border-black';
 
                   if (col.id === 'item_no') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px] py-0.5`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] py-1 align-middle`}>
                         {item ? item.item_no || idx + 1 : idx + 1}
                       </td>
                     );
                   }
                   if (col.id === 'description') {
                     return (
-                      <td key={col.id} className={`${borderClass} text-left px-2 font-medium break-words max-w-[280px]`}>
+                      <td key={col.id} className={`${borderClass} text-left px-2 py-1 align-middle font-medium break-words max-w-[280px]`}>
                         {item ? item.description : ''}
                       </td>
                     );
                   }
                   if (col.id === 'sq_ft') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] py-1 align-middle`}>
                         {item && (item.sq_ft > 0 ? item.sq_ft : (item.quantity && item.unit === 'Sq.Ft' ? item.quantity : ''))}
                       </td>
                     );
                   }
                   if (col.id === 'quantity') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] py-1 align-middle`}>
                         {item ? item.quantity : ''}
                       </td>
                     );
                   }
                   if (col.id === 'unit') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] py-1 align-middle`}>
                         {item ? item.unit : ''}
                       </td>
                     );
                   }
                   if (col.id === 'rate') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px] text-right pr-1.5`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] text-right pr-1.5 py-1 align-middle`}>
                         {item ? item.rate : ''}
                       </td>
                     );
                   }
                   if (col.id === 'discount') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px] text-right pr-1.5`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] text-right pr-1.5 py-1 align-middle`}>
                         {item && item.discount > 0 ? item.discount : ''}
                       </td>
                     );
                   }
                   if (col.id === 'gst_rate') {
                     return (
-                      <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                      <td key={col.id} className={`${borderClass} font-mono text-[11px] py-1 align-middle`}>
                         {item ? `${item.gst_rate || 0}%` : ''}
                       </td>
                     );
                   }
                   if (col.id === 'total') {
                     return (
-                      <td key={col.id} className={`${borderClass} text-right pr-2 font-mono text-[11px] font-semibold`}>
+                      <td key={col.id} className={`${borderClass} text-right pr-2 py-1 align-middle font-mono text-[11px] font-semibold`}>
                         {item ? formatNumber(item.total_amount || (item.quantity * item.rate)) : '0'}
                       </td>
                     );
@@ -673,7 +673,7 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
 
                   // Custom column (e.g. HSN/SAC, Batch No)
                   return (
-                    <td key={col.id} className={`${borderClass} font-mono text-[11px]`}>
+                    <td key={col.id} className={`${borderClass} font-mono text-[11px] py-1 align-middle`}>
                       {item ? (item[col.key] ?? item[col.id] ?? '') : ''}
                     </td>
                   );
@@ -682,7 +682,7 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
             ))}
 
             {/* 1. Subtotal / Total Row */}
-            <tr className="border-t-2 border-black font-bold text-xs h-[22px]">
+            <tr className="border-t-2 border-black font-bold text-xs">
               {visibleCols.map((col, cIdx) => {
                 const isLast = cIdx === visibleCols.length - 1;
                 const isLabelCol = cIdx === labelColIndex;
@@ -690,31 +690,31 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                 const borderClass = isLast ? '' : 'border-r border-black';
                 if (isLabelCol) {
                   return (
-                    <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs`}>
+                    <td key={col.id} className={`${borderClass} text-right pr-2 py-1.5 align-middle font-bold text-xs`}>
                       Total
                     </td>
                   );
                 }
                 if (isTotalCol) {
                   return (
-                    <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
+                    <td key={col.id} className="text-right pr-2 py-1.5 align-middle font-mono font-bold text-xs">
                       {formatNumber(taxable)}
                     </td>
                   );
                 }
-                return <td key={col.id} className={borderClass}></td>;
+                return <td key={col.id} className={`${borderClass} py-1.5 align-middle`}></td>;
               })}
             </tr>
 
             {/* 2. Blank Grid Spacer Row 1 */}
-            <tr className="border-b border-slate-200 h-[21px]">
+            <tr className="border-b border-slate-200 h-[22px]">
               {visibleCols.map((col, cIdx) => (
                 <td key={col.id} className={cIdx !== visibleCols.length - 1 ? 'border-r border-black' : ''}></td>
               ))}
             </tr>
 
             {/* 3. Blank Grid Spacer Row 2 */}
-            <tr className="border-b border-slate-200 h-[21px]">
+            <tr className="border-b border-slate-200 h-[22px]">
               {visibleCols.map((col, cIdx) => (
                 <td key={col.id} className={cIdx !== visibleCols.length - 1 ? 'border-r border-black' : ''}></td>
               ))}
@@ -723,7 +723,7 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
             {/* 4 & 5. GST Tax Rows (CGST + SGST or IGST) */}
             {!isInterstate ? (
               <>
-                <tr className="border-b border-slate-200 font-bold text-xs h-[21px]">
+                <tr className="border-b border-slate-200 font-bold text-xs">
                   {visibleCols.map((col, cIdx) => {
                     const isLast = cIdx === visibleCols.length - 1;
                     const isLabelCol = cIdx === labelColIndex;
@@ -731,23 +731,23 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                     const borderClass = isLast ? '' : 'border-r border-black';
                     if (isLabelCol) {
                       return (
-                        <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs whitespace-nowrap`}>
+                        <td key={col.id} className={`${borderClass} text-right pr-2 py-1.5 align-middle font-bold text-xs whitespace-nowrap`}>
                           CGST {cgstRate}%
                         </td>
                       );
                     }
                     if (isTotalCol) {
                       return (
-                        <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
+                        <td key={col.id} className="text-right pr-2 py-1.5 align-middle font-mono font-bold text-xs">
                           {formatNumber(cgstAmt)}
                         </td>
                       );
                     }
-                    return <td key={col.id} className={borderClass}></td>;
+                    return <td key={col.id} className={`${borderClass} py-1.5 align-middle`}></td>;
                   })}
                 </tr>
 
-                <tr className="border-b border-slate-200 font-bold text-xs h-[21px]">
+                <tr className="font-bold text-xs">
                   {visibleCols.map((col, cIdx) => {
                     const isLast = cIdx === visibleCols.length - 1;
                     const isLabelCol = cIdx === labelColIndex;
@@ -755,24 +755,24 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                     const borderClass = isLast ? '' : 'border-r border-black';
                     if (isLabelCol) {
                       return (
-                        <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs whitespace-nowrap`}>
+                        <td key={col.id} className={`${borderClass} text-right pr-2 py-1.5 align-middle font-bold text-xs whitespace-nowrap`}>
                           SGST {sgstRate}%
                         </td>
                       );
                     }
                     if (isTotalCol) {
                       return (
-                        <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
+                        <td key={col.id} className="text-right pr-2 py-1.5 align-middle font-mono font-bold text-xs">
                           {formatNumber(sgstAmt)}
                         </td>
                       );
                     }
-                    return <td key={col.id} className={borderClass}></td>;
+                    return <td key={col.id} className={`${borderClass} py-1.5 align-middle`}></td>;
                   })}
                 </tr>
               </>
             ) : (
-              <tr className="border-b border-slate-200 font-bold text-xs h-[21px]">
+              <tr className="font-bold text-xs">
                 {visibleCols.map((col, cIdx) => {
                   const isLast = cIdx === visibleCols.length - 1;
                   const isLabelCol = cIdx === labelColIndex;
@@ -780,25 +780,25 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                   const borderClass = isLast ? '' : 'border-r border-black';
                   if (isLabelCol) {
                     return (
-                      <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs whitespace-nowrap`}>
+                      <td key={col.id} className={`${borderClass} text-right pr-2 py-1.5 align-middle font-bold text-xs whitespace-nowrap`}>
                         IGST {igstRate}%
                       </td>
                     );
                   }
                   if (isTotalCol) {
                     return (
-                      <td key={col.id} className="text-right pr-2 font-mono font-bold text-xs">
+                      <td key={col.id} className="text-right pr-2 py-1.5 align-middle font-mono font-bold text-xs">
                         {formatNumber(igstAmt)}
                       </td>
                     );
                   }
-                  return <td key={col.id} className={borderClass}></td>;
+                  return <td key={col.id} className={`${borderClass} py-1.5 align-middle`}></td>;
                 })}
               </tr>
             )}
 
             {/* 6. Grand Total Row */}
-            <tr className="border-t-2 border-black font-bold h-[26px] bg-slate-50/30">
+            <tr className="font-bold bg-slate-50/40">
               {visibleCols.map((col, cIdx) => {
                 const isLast = cIdx === visibleCols.length - 1;
                 const isLabelCol = cIdx === labelColIndex;
@@ -806,19 +806,19 @@ export default function IndustrialTemplate({ invoice, company, headerPreferences
                 const borderClass = isLast ? '' : 'border-r border-black';
                 if (isLabelCol) {
                   return (
-                    <td key={col.id} className={`${borderClass} text-right pr-2 font-bold text-xs`}>
+                    <td key={col.id} className={`${borderClass} border-t-2 border-black text-right pr-2 py-2.5 align-middle font-bold text-xs`}>
                       Total
                     </td>
                   );
                 }
                 if (isTotalCol) {
                   return (
-                    <td key={col.id} className="text-right pr-2 font-mono font-black text-sm">
+                    <td key={col.id} className="border-t-2 border-black text-right pr-2 py-2.5 align-middle font-mono font-black text-sm">
                       {formatNumber(grandTotal)}
                     </td>
                   );
                 }
-                return <td key={col.id} className={borderClass}></td>;
+                return <td key={col.id} className={`${borderClass} border-t-2 border-black py-2.5 align-middle`}></td>;
               })}
             </tr>
           </tbody>

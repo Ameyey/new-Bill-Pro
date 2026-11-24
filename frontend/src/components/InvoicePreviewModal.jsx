@@ -279,11 +279,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice, company,
             clonedPaper.style.margin = '0 auto';
             clonedPaper.style.boxShadow = 'none';
 
-            // Ensure all table cells and text spans avoid character clipping in canvas render
-            const cells = clonedPaper.querySelectorAll('td, th');
-            cells.forEach(cell => {
-              cell.style.lineHeight = 'normal';
-            });
+            // Ensure all text spans avoid character clipping in canvas render
             const spans = clonedPaper.querySelectorAll('span');
             spans.forEach(span => {
               if (span.style.overflow === 'hidden') {
