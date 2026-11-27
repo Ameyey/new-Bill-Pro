@@ -882,7 +882,7 @@ export default function CreateInvoice() {
   };
 
   const handleSubmitInvoice = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!selectedCustomerId) {
       error('Please select a customer.');
       return;
@@ -949,6 +949,7 @@ export default function CreateInvoice() {
       }
 
       if (res.success) {
+        setShowPreview(false);
         try {
           localStorage.removeItem(DRAFT_STORAGE_KEY);
         } catch (e) { }
@@ -1853,6 +1854,9 @@ export default function CreateInvoice() {
         onClose={() => setShowPreview(false)}
         invoice={previewData}
         company={{ ...(company || {}), logo_url: activeLogoUrl || company?.logo_url }}
+        onSave={handleSubmitInvoice}
+        saving={saving}
+        isEditMode={isEditMode}
       />
 
       {/* Quick Add / Edit Customer Modal */}

@@ -43,7 +43,7 @@ const getCompanyFontSizePx = (val) => {
   return isNaN(parsed) ? 24 : parsed;
 };
 
-export default function InvoicePreviewModal({ isOpen, onClose, invoice, company, onlyBill = false }) {
+export default function InvoicePreviewModal({ isOpen, onClose, invoice, company, onlyBill = false, onSave, saving = false, isEditMode = false }) {
   const [template, setTemplate] = useState('industrial'); // 'industrial' or 'modern'
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(invoice?.payment_status || 'unpaid');
@@ -420,16 +420,29 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice, company,
                 <span>Print</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={generatingPdf}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
-                title="Download PDF"
-              >
-                <Download className={`w-3.5 h-3.5 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                <span>{generatingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
-              </button>
+              {onSave ? (
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                  title={isEditMode ? 'Update Invoice' : 'Create & Save Invoice'}
+                >
+                  <Save className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
+                  <span>{saving ? (isEditMode ? 'Updating...' : 'Generating...') : (isEditMode ? 'Update Invoice' : 'Create & Save Invoice')}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={generatingPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                  title="Download PDF"
+                >
+                  <Download className={`w-3.5 h-3.5 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                  <span>{generatingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -527,17 +540,30 @@ export default function InvoicePreviewModal({ isOpen, onClose, invoice, company,
               </div>
             </div>
 
-            {/* Print / Download / Share / Settings Actions */}
+            {/* Print / Download or Create & Save / Share / Settings Actions */}
             <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full justify-between pt-0.5">
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={generatingPdf}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs shadow-brand-600/20 transition disabled:opacity-50 cursor-pointer"
-              >
-                <Download className={`w-3.5 h-3.5 ${generatingPdf ? 'animate-bounce' : ''}`} />
-                <span>{generatingPdf ? 'Generating...' : 'Download PDF'}</span>
-              </button>
+              {onSave ? (
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={saving}
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs shadow-brand-600/20 transition disabled:opacity-50 cursor-pointer"
+                  title={isEditMode ? 'Update Invoice' : 'Create & Save Invoice'}
+                >
+                  <Save className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
+                  <span>{saving ? (isEditMode ? 'Updating...' : 'Generating...') : (isEditMode ? 'Update Invoice' : 'Create & Save Invoice')}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={generatingPdf}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs shadow-brand-600/20 transition disabled:opacity-50 cursor-pointer"
+                >
+                  <Download className={`w-3.5 h-3.5 ${generatingPdf ? 'animate-bounce' : ''}`} />
+                  <span>{generatingPdf ? 'Generating...' : 'Download PDF'}</span>
+                </button>
+              )}
 
               <button
                 type="button"
